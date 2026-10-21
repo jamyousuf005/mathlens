@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mongoDb } from '@/lib/db/client';
+import { auth } from '@/lib/auth';
 
 export async function GET() {
   const envCheck = {
@@ -25,12 +26,47 @@ export async function GET() {
     mongoError = error.message;
   }
 
+  let directAuthResult = null;
+  let directAuthError = null;
+
+  try {
+    const testReq = new Request('https://mathlens-rho.vercel.app/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://mathlens-rho.vercel.app',
+      },
+      body: JSON.stringify({
+        provider: 'google',
+        callbackURL: 'https://mathlens-rho.vercel.app/welcome',
+      }),
+    });
+
+    const res = await auth.handler(testReq);
+    const bodyText = await res.text();
+    directAuthResult = {
+      status: res.status,
+      body: bodyText,
+    };
+  } catch (err: unknown) {
+    const error = err as Error;
+    directAuthError = {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack,
+    };
+  }
+
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     environment: envCheck,
     mongoConnection: {
       status: mongoStatus,
       error: mongoError,
+    },
+    directAuthExecution: {
+      result: directAuthResult,
+      error: directAuthError,
     },
   });
 }
