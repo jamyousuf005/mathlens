@@ -39,7 +39,7 @@ export default function AuthPage() {
       setErrorMsg(null);
       await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/solve',
+        callbackURL: '/welcome',
       });
     } catch (err: unknown) {
       console.error(err);
@@ -123,7 +123,7 @@ export default function AuthPage() {
         return;
       }
 
-      router.push('/solve');
+      router.push('/welcome');
     } catch (err: unknown) {
       console.error(err);
       setErrorMsg('Verification failed. Please check the code and try again.');
@@ -167,10 +167,10 @@ export default function AuthPage() {
   return (
     <div className="bg-[#FCF9EA] text-[#1E231D] min-h-screen flex flex-col justify-between antialiased selection:bg-[#DB9558]/30">
       {/* Top Header */}
-      <header className="w-full bg-[#FCF9EA]/80 backdrop-blur-md border-b border-[#1E231D]/5 sticky top-0 z-40">
-        <div className="h-16 max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm border border-[#1E231D]/10">
+      <header className="w-full bg-[#FCF9EA]/95 backdrop-blur-md border-b border-[#1E231D]/10 sticky top-0 z-50">
+        <div className="h-16 max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3">
+          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-xs border border-[#1E231D]/10">
               <svg className="w-5 h-5 text-[#1E231D]" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="7" />
                 <path d="m16 16 4.5 4.5" />
@@ -178,56 +178,20 @@ export default function AuthPage() {
                 <circle cx="13.5" cy="9.5" fill="#DB9558" r="1.5" stroke="none" />
               </svg>
             </div>
-            <span className="text-xl font-bold tracking-tight text-[#1E231D]">
+            <span className="text-lg sm:text-xl font-bold tracking-tight text-[#1E231D]">
               Math<span className="text-[#DB9558]">Lens</span>
             </span>
           </Link>
+
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-[#1E231D]/70 hover:text-[#1E231D] text-sm font-medium border border-[#1E231D]/10 shadow-sm transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-1.5 rounded-full bg-white hover:bg-[#F1F5EB] active:scale-[0.98] text-[#1E231D]/80 hover:text-[#1E231D] text-xs sm:text-sm font-medium border border-[#1E231D]/10 shadow-xs transition-all shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span>Back to home</span>
           </Link>
         </div>
       </header>
-
-      {/* Structured Data (JSON-LD) for Search Engines */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'WebPage',
-            name: 'Sign In • MathLens Academic Workspace',
-            url: 'https://mathlens-rho.vercel.app/auth',
-            description:
-              'Sign in to MathLens using Google or email OTP to synchronize step-by-step math derivations, or continue offline as guest.',
-            isPartOf: {
-              '@type': 'WebSite',
-              name: 'MathLens',
-              url: 'https://mathlens-rho.vercel.app',
-            },
-            breadcrumb: {
-              '@type': 'BreadcrumbList',
-              itemListElement: [
-                {
-                  '@type': 'ListItem',
-                  position: 1,
-                  name: 'Home',
-                  item: 'https://mathlens-rho.vercel.app',
-                },
-                {
-                  '@type': 'ListItem',
-                  position: 2,
-                  name: 'Sign In',
-                  item: 'https://mathlens-rho.vercel.app/auth',
-                },
-              ],
-            },
-          }),
-        }}
-      />
 
       {/* Main Content Area */}
       <main className="w-full flex-1 flex items-center justify-center px-4 sm:px-6 py-8 md:py-12">
@@ -248,16 +212,16 @@ export default function AuthPage() {
           </div>
 
           {/* 2-Column Academic Workstation Frame */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-            {/* LEFT COLUMN: Vector Art, Golden Ratio Lens & Interactive Transformation Showcase */}
-            <div className="lg:col-span-6 flex flex-col gap-6">
-              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#1E231D]/10 flex flex-col justify-between relative overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start">
+            {/* COLUMN 1 (On desktop: Left side | On mobile: Appears below auth form via order-2 lg:order-1) */}
+            <div className="order-2 lg:order-1 lg:col-span-6 flex flex-col gap-5 sm:gap-6">
+              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 flex flex-col justify-between relative overflow-hidden">
                 {/* Top Tag & Monospaced Index */}
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-[#1E231D]/60 uppercase tracking-wider">
+                  <span className="font-mono text-[11px] sm:text-xs text-[#1E231D]/60 uppercase tracking-wider">
                     FIG 1.0 • OPTICAL CAS PIPELINE
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-[#FCF9EA] border border-[#1E231D]/10 font-mono text-xs text-[#1E231D] font-semibold">
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#FCF9EA] border border-[#1E231D]/10 font-mono text-[10px] sm:text-xs text-[#1E231D] font-semibold">
                     100% Client-Side
                   </span>
                 </div>
@@ -358,12 +322,12 @@ export default function AuthPage() {
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Streamlined Unified Auth Card */}
-            <div className="lg:col-span-6 flex flex-col">
-              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#1E231D]/10 relative">
+            {/* COLUMN 2: Unified Auth Card (On mobile: Appears FIRST via order-1 lg:order-2) */}
+            <div className="order-1 lg:order-2 lg:col-span-6 flex flex-col">
+              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 relative">
                 {/* Dynamic Header Description */}
-                <div className="mb-6">
-                  <h1 className="text-2xl font-bold text-[#1E231D] tracking-tight">
+                <div className="mb-5 sm:mb-6">
+                  <h1 className="text-xl sm:text-2xl font-bold text-[#1E231D] tracking-tight">
                     {mode === 'otp' ? 'Enter Verification Code' : 'Access Mathematical Workspace'}
                   </h1>
                   <p className="text-xs sm:text-sm text-[#1E231D]/70 mt-1">
@@ -485,7 +449,7 @@ export default function AuthPage() {
                       <label className="block text-xs font-semibold text-[#1E231D] mb-2 text-center">
                         Enter 6-digit code
                       </label>
-                      <div className="flex items-center justify-center gap-2 sm:gap-3">
+                      <div className="flex items-center justify-between gap-1.5 sm:gap-3 max-w-[340px] mx-auto">
                         {otpCode.map((digit, index) => (
                           <input
                             key={index}
@@ -497,7 +461,7 @@ export default function AuthPage() {
                             onChange={(e) => handleOtpChange(index, e.target.value)}
                             onKeyDown={(e) => handleOtpKeyDown(index, e)}
                             onPaste={handleOtpPaste}
-                            className="w-11 h-13 sm:w-12 sm:h-14 text-center font-mono text-xl sm:text-2xl font-bold bg-[#F1F5EB] border border-[#1E231D]/15 rounded-xl focus:bg-white focus:border-[#DB9558] focus:ring-2 focus:ring-[#DB9558] focus:outline-none transition-all text-[#1E231D]"
+                            className="w-10 h-12 sm:w-12 sm:h-14 text-center font-mono text-lg sm:text-2xl font-bold bg-[#F1F5EB] border border-[#1E231D]/15 rounded-xl focus:bg-white focus:border-[#DB9558] focus:ring-2 focus:ring-[#DB9558] focus:outline-none transition-all text-[#1E231D]"
                           />
                         ))}
                       </div>

@@ -39,5 +39,44 @@ export default function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: 'Sign In • MathLens Academic Workspace',
+    url: 'https://mathlens-rho.vercel.app/auth',
+    description:
+      'Sign in to MathLens using Google or email OTP to synchronize step-by-step math derivations, or continue offline as guest.',
+    isPartOf: {
+      '@type': 'WebSite',
+      name: 'MathLens',
+      url: 'https://mathlens-rho.vercel.app',
+    },
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'Home',
+          item: 'https://mathlens-rho.vercel.app',
+        },
+        {
+          '@type': 'ListItem',
+          position: 2,
+          name: 'Sign In',
+          item: 'https://mathlens-rho.vercel.app/auth',
+        },
+      ],
+    },
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {children}
+    </>
+  );
 }
