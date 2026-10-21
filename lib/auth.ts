@@ -11,6 +11,10 @@ export const auth = betterAuth({
   database: mongodbAdapter(mongoDb),
   secret: process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  trustedOrigins: [
+    'https://mathlens-rho.vercel.app',
+    'http://localhost:3000',
+  ],
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID || '',
