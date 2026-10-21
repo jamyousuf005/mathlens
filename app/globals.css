@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer theme {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-canvas: #FCF9EA;
+    --color-ink: #1E231D;
+    --color-ink-muted: rgba(30, 35, 29, 0.62);
+    --color-amber: #DB9558;
+    --color-sage: #97A87A;
+    --color-olive-tint: #A8BBA3;
+    --color-olive-tint-soft: rgba(168, 187, 163, 0.25);
+    
+    --color-surface: #FFFFFF;
+    --color-surface-container-lowest: #FFFFFF;
+    --color-surface-container-low: #F1F5EB;
+    --color-surface-container: #EBEFE6;
+    --color-surface-container-high: #E5EAE0;
+    --color-surface-variant: #DFE4DA;
+    
+    --color-primary: #89511A;
+    --color-primary-container: #DB9558;
+    --color-on-primary: #FFFFFF;
+    
+    --color-secondary: #54643C;
+    --color-secondary-container: #D4E6B4;
+    --color-tertiary: #52634F;
+    --color-tertiary-fixed: #D4E8CE;
+    --color-on-tertiary-fixed-variant: #3A4B38;
+    
+    --color-error: #B5472F;
+    --color-error-container: #FFDAD6;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom utility classes mapping to project design tokens */
+.bg-canvas { background-color: #FCF9EA; }
+.text-ink { color: #1E231D; }
+.text-ink-muted { color: rgba(30, 35, 29, 0.62); }
+.bg-amber { background-color: #DB9558; }
+.text-amber { color: #DB9558; }
+.bg-sage { background-color: #97A87A; }
+.text-sage { color: #97A87A; }
+.bg-olive-tint { background-color: #A8BBA3; }
+.bg-olive-tint-soft { background-color: rgba(168, 187, 163, 0.25); }
+
+.bg-surface { background-color: #FFFFFF; }
+.bg-surface-container-lowest { background-color: #FFFFFF; }
+.bg-surface-container-low { background-color: #F1F5EB; }
+.bg-surface-container { background-color: #EBEFE6; }
+.bg-surface-container-high { background-color: #E5EAE0; }
+.bg-surface-variant { background-color: #DFE4DA; }
+
+.bg-primary { background-color: #89511A; }
+.text-primary { color: #89511A; }
+.bg-secondary { background-color: #54643C; }
+.text-secondary { color: #54643C; }
+.bg-secondary-container { background-color: #D4E6B4; }
+.bg-tertiary { background-color: #52634F; }
+.text-tertiary { color: #52634F; }
+.bg-tertiary-fixed { background-color: #D4E8CE; }
+.text-on-tertiary-fixed-variant { color: #3A4B38; }
+
+.text-error { color: #B5472F; }
+.bg-error-container { background-color: #FFDAD6; }
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #FCF9EA;
+    color: #1E231D;
+  }
+}
+
+/* Hide scrollbar while preserving scroll functionality */
+::-webkit-scrollbar {
+  display: none;
 }

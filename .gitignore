@@ -43,7 +43,6 @@ next-env.d.ts
 
 # IDE and agent tool artifacts (keep repo clean for public viewing)
 .agents/
-.aider-desk/
 skills-lock.json
 .vscode/
 .idea/
