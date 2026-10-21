@@ -1,0 +1,575 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { authClient } from '@/lib/auth-client';
+import {
+  ArrowLeft,
+  CheckCircle,
+  Mail,
+  Cpu,
+  BookOpen,
+  ShieldCheck,
+  CheckSquare,
+  ArrowRight,
+  Loader2,
+  KeyRound,
+} from 'lucide-react';
+
+export default function AuthPage() {
+  const router = useRouter();
+
+  // Mode: 'signin' | 'otp'
+  const [mode, setMode] = useState<'signin' | 'otp'>('signin');
+  const [email, setEmail] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
+  const [otpCode, setOtpCode] = useState(['', '', '', '', '', '']);
+
+  // Loading & Feedback
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Google OAuth Login
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+      await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: '/solve',
+      });
+    } catch (err: unknown) {
+      console.error(err);
+      setErrorMsg('Failed to initiate Google authentication. Please try again.');
+      setIsLoading(false);
+    }
+  };
+
+  // Cooldown timer trigger
+  const startCooldown = () => {
+    setCooldown(45);
+    const interval = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Email OTP Request
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      const res = await authClient.emailOtp.sendVerificationOtp({
+        email: cleanEmail,
+        type: 'sign-in',
+      });
+
+      if (res.error) {
+        setErrorMsg(res.error.message || 'Failed to send verification code.');
+        setIsLoading(false);
+        return;
+      }
+
+      setSuccessMsg(`Verification code sent to ${cleanEmail}`);
+      setMode('otp');
+      startCooldown();
+      setIsLoading(false);
+    } catch (err: unknown) {
+      console.error(err);
+      setErrorMsg('An unexpected error occurred while sending the code.');
+      setIsLoading(false);
+    }
+  };
+
+  // Verify 6-digit OTP
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = otpCode.join('');
+    if (code.length !== 6) {
+      setErrorMsg('Please enter the complete 6-digit code.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setErrorMsg(null);
+
+      const res = await authClient.signIn.emailOtp({
+        email: email.trim().toLowerCase(),
+        otp: code,
+      });
+
+      if (res.error) {
+        setErrorMsg(res.error.message || 'Invalid or expired verification code.');
+        setIsLoading(false);
+        return;
+      }
+
+      router.push('/solve');
+    } catch (err: unknown) {
+      console.error(err);
+      setErrorMsg('Verification failed. Please check the code and try again.');
+      setIsLoading(false);
+    }
+  };
+
+  // OTP Input keydown auto-advance
+  const handleOtpChange = (index: number, val: string) => {
+    if (!/^\d*$/.test(val)) return;
+    const newOtp = [...otpCode];
+    newOtp[index] = val.slice(-1);
+    setOtpCode(newOtp);
+
+    // Auto advance
+    if (val && index < 5) {
+      const nextInput = document.getElementById(`otp-box-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  // OTP Input paste support for entire 6-digit code
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (/^\d{6}$/.test(pastedData)) {
+      const digits = pastedData.split('');
+      setOtpCode(digits);
+      const lastInput = document.getElementById('otp-box-5');
+      lastInput?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-box-${index - 1}`);
+      prevInput?.focus();
+    }
+  };
+
+  return (
+    <div className="bg-[#FCF9EA] text-[#1E231D] min-h-screen flex flex-col justify-between antialiased selection:bg-[#DB9558]/30">
+      {/* Top Header */}
+      <header className="w-full bg-[#FCF9EA]/80 backdrop-blur-md border-b border-[#1E231D]/5 sticky top-0 z-40">
+        <div className="h-16 max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm border border-[#1E231D]/10">
+              <svg className="w-5 h-5 text-[#1E231D]" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m16 16 4.5 4.5" />
+                <path d="m7 12 2-3 2.5 4" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="13.5" cy="9.5" fill="#DB9558" r="1.5" stroke="none" />
+              </svg>
+            </div>
+            <span className="text-xl font-bold tracking-tight text-[#1E231D]">
+              Math<span className="text-[#DB9558]">Lens</span>
+            </span>
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-[#1E231D]/70 hover:text-[#1E231D] text-sm font-medium border border-[#1E231D]/10 shadow-sm transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to home</span>
+          </Link>
+        </div>
+      </header>
+
+      {/* Structured Data (JSON-LD) for Search Engines */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            name: 'Sign In • MathLens Academic Workspace',
+            url: 'https://mathlens-rho.vercel.app/auth',
+            description:
+              'Sign in to MathLens using Google or email OTP to synchronize step-by-step math derivations, or continue offline as guest.',
+            isPartOf: {
+              '@type': 'WebSite',
+              name: 'MathLens',
+              url: 'https://mathlens-rho.vercel.app',
+            },
+            breadcrumb: {
+              '@type': 'BreadcrumbList',
+              itemListElement: [
+                {
+                  '@type': 'ListItem',
+                  position: 1,
+                  name: 'Home',
+                  item: 'https://mathlens-rho.vercel.app',
+                },
+                {
+                  '@type': 'ListItem',
+                  position: 2,
+                  name: 'Sign In',
+                  item: 'https://mathlens-rho.vercel.app/auth',
+                },
+              ],
+            },
+          }),
+        }}
+      />
+
+      {/* Main Content Area */}
+      <main className="w-full flex-1 flex items-center justify-center px-4 sm:px-6 py-8 md:py-12">
+        <div className="w-full max-w-7xl mx-auto">
+          {/* Engine Status Pill & Sub-Navigation Header */}
+          <div className="flex items-center justify-between pb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#1E231D]/10 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-[#97A87A] animate-pulse" />
+              <span className="font-mono text-xs text-[#1E231D] font-medium tracking-tight">
+                Deterministic Engine Ready (CAS-v1.0)
+              </span>
+            </div>
+            <div className="hidden sm:flex items-center gap-3 text-xs text-[#1E231D]/60 font-medium">
+              <span>Client-Side Sandbox</span>
+              <span className="w-1 h-1 rounded-full bg-[#1E231D]/20" />
+              <span>Zero Remote AI Compute</span>
+            </div>
+          </div>
+
+          {/* 2-Column Academic Workstation Frame */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+            {/* LEFT COLUMN: Vector Art, Golden Ratio Lens & Interactive Transformation Showcase */}
+            <div className="lg:col-span-6 flex flex-col gap-6">
+              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#1E231D]/10 flex flex-col justify-between relative overflow-hidden">
+                {/* Top Tag & Monospaced Index */}
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-[#1E231D]/60 uppercase tracking-wider">
+                    FIG 1.0 • OPTICAL CAS PIPELINE
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#FCF9EA] border border-[#1E231D]/10 font-mono text-xs text-[#1E231D] font-semibold">
+                    100% Client-Side
+                  </span>
+                </div>
+
+                {/* Central Visual Composition: Golden Ratio Compass & Transformation */}
+                <div className="my-6 flex flex-col items-center justify-center relative">
+                  <div className="relative w-full max-w-[340px] h-48 flex items-center justify-center">
+                    <svg className="w-full h-full text-[#1E231D]" fill="none" viewBox="0 0 340 190">
+                      <rect height="140" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" width="200" x="70" y="25" />
+                      <rect height="140" stroke="currentColor" strokeDasharray="3 3" strokeOpacity="0.12" strokeWidth="1" width="124" x="70" y="25" />
+                      <rect height="76" stroke="currentColor" strokeDasharray="3 3" strokeOpacity="0.12" strokeWidth="1" width="76" x="194" y="25" />
+                      <rect height="64" stroke="currentColor" strokeDasharray="3 3" strokeOpacity="0.12" strokeWidth="1" width="48" x="194" y="101" />
+                      <path d="M70 165 C 70 87, 134 25, 212 25" stroke="#97A87A" strokeLinecap="round" strokeWidth="1.75" />
+                      <path d="M212 25 C 246 25, 270 51, 270 85" stroke="#DB9558" strokeLinecap="round" strokeWidth="1.75" />
+                      <path d="M270 85 C 270 110, 250 128, 226 128" stroke="#1E231D" strokeLinecap="round" strokeWidth="1.5" />
+                      <path d="M226 128 C 210 128, 198 116, 198 102" stroke="#97A87A" strokeLinecap="round" strokeWidth="1.25" />
+                      <circle cx="170" cy="95" r="54" stroke="#1E231D" strokeOpacity="0.25" strokeWidth="1" />
+                      <circle cx="170" cy="95" fill="#DB9558" r="4" />
+                      <line stroke="#1E231D" strokeOpacity="0.2" strokeWidth="0.75" x1="106" x2="234" y1="95" y2="95" />
+                      <line stroke="#1E231D" strokeOpacity="0.2" strokeWidth="0.75" x1="170" x2="170" y1="31" y2="159" />
+                      <text fill="#1E231D" fillOpacity="0.5" fontFamily="monospace" fontSize="9" x="76" y="40">φ = 1.618</text>
+                      <text fill="#1E231D" fillOpacity="0.5" fontFamily="monospace" fontSize="9" x="216" y="152">∇ × B = 0</text>
+                    </svg>
+                  </div>
+
+                  {/* Transformation Card: Handwritten -> LaTeX Engine */}
+                  <div className="w-full bg-[#FCF9EA] rounded-xl p-4 border border-[#1E231D]/10 shadow-sm mt-2 flex flex-col md:flex-row items-center justify-between gap-3">
+                    <div className="flex-1 w-full bg-white rounded-lg p-3 border border-[#1E231D]/10">
+                      <span className="text-[11px] font-medium text-[#1E231D]/60 block mb-1">OCR Handwrite Track</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#1E231D]/60 text-sm">✎</span>
+                        <span className="text-base text-[#1E231D] italic font-serif select-none">
+                          x² − 5x + 6 = 0
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center px-2 py-1">
+                      <ArrowRight className="w-5 h-5 text-[#DB9558]" />
+                      <span className="font-mono text-[10px] text-[#1E231D]/60">1.4ms</span>
+                    </div>
+
+                    <div className="flex-1 w-full bg-white rounded-lg p-3 border border-[#1E231D]/10 flex flex-col justify-between">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-medium text-[#1E231D]/60">Rigorous CAS Output</span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#97A87A]/20 text-[#1E231D] text-[10px] font-semibold">
+                          <CheckCircle className="w-3 h-3 text-[#97A87A]" />
+                          Validated
+                        </span>
+                      </div>
+                      <div className="font-mono text-sm text-[#1E231D] font-bold">
+                        x ∈ &#123; 2 , 3 &#125;
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feature Triad Badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 bg-[#FCF9EA]/50 rounded-xl p-3 border border-[#1E231D]/5">
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-[#1E231D]/5 shadow-sm">
+                    <div className="w-7 h-7 rounded-full bg-[#FCF9EA] flex items-center justify-center shrink-0 text-[#1E231D]">
+                      <Cpu className="w-4 h-4 text-[#89511A]" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Local CAS</span>
+                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">Deterministic AST</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-[#1E231D]/5 shadow-sm">
+                    <div className="w-7 h-7 rounded-full bg-[#FCF9EA] flex items-center justify-center shrink-0 text-[#1E231D]">
+                      <ShieldCheck className="w-4 h-4 text-[#97A87A]" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Zero Exfiltration</span>
+                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">100% Private</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-[#1E231D]/5 shadow-sm">
+                    <div className="w-7 h-7 rounded-full bg-[#FCF9EA] flex items-center justify-center shrink-0 text-[#1E231D]">
+                      <CheckSquare className="w-4 h-4 text-[#DB9558]" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Step-by-Step</span>
+                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">Inductive Proofs</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Academic Citation Footer Note */}
+              <div className="bg-[#DFE4DA]/40 rounded-xl p-4 flex items-center gap-3 border border-[#1E231D]/5">
+                <BookOpen className="w-5 h-5 text-[#1E231D]/70 shrink-0" />
+                <p className="text-xs text-[#1E231D]/70 leading-relaxed">
+                  Designed for researchers, educators, and students. Adheres strictly to ISO 80000-2 mathematical conventions.
+                </p>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Streamlined Unified Auth Card */}
+            <div className="lg:col-span-6 flex flex-col">
+              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-[#1E231D]/10 relative">
+                {/* Dynamic Header Description */}
+                <div className="mb-6">
+                  <h1 className="text-2xl font-bold text-[#1E231D] tracking-tight">
+                    {mode === 'otp' ? 'Enter Verification Code' : 'Access Mathematical Workspace'}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-[#1E231D]/70 mt-1">
+                    {mode === 'otp'
+                      ? `We sent a 6-digit cryptographic code to ${email}.`
+                      : 'Authenticate to synchronize derivation notebooks or proceed offline.'}
+                  </p>
+                </div>
+
+                {/* Quick Google OAuth Button */}
+                {mode !== 'otp' && (
+                  <div className="flex flex-col gap-3 mb-6">
+                    <button
+                      onClick={handleGoogleSignIn}
+                      disabled={isLoading}
+                      className="w-full h-12 px-4 rounded-full bg-[#F1F5EB] hover:bg-[#EBEFE6] active:scale-[0.99] transition-all flex items-center justify-center gap-3 text-[#1E231D] text-sm font-medium border border-[#1E231D]/5 disabled:opacity-50"
+                      type="button"
+                    >
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                        <path
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          fill="#4285F4"
+                        />
+                        <path
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          fill="#34A853"
+                        />
+                        <path
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          fill="#FBBC05"
+                        />
+                        <path
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          fill="#EA4335"
+                        />
+                      </svg>
+                      <span>Continue with Google</span>
+                    </button>
+
+                    {/* Subtle Divider */}
+                    <div className="relative flex items-center justify-center my-2">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-[#1E231D]/10"></div>
+                      </div>
+                      <span className="relative px-3 bg-white text-[#1E231D]/60 text-[11px] tracking-wider uppercase font-medium">
+                        or continue with email
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error & Success Messages */}
+                {errorMsg && (
+                  <div className="mb-4 p-3 rounded-lg bg-[#FFDAD6] border border-[#B5472F]/20 text-[#B5472F] text-xs font-medium">
+                    {errorMsg}
+                  </div>
+                )}
+                {successMsg && (
+                  <div className="mb-4 p-3 rounded-lg bg-[#97A87A]/20 border border-[#97A87A]/30 text-[#1E231D] text-xs font-medium">
+                    {successMsg}
+                  </div>
+                )}
+
+                {/* VIEW 1: SIGN IN (Fast OTP) */}
+                {mode === 'signin' && (
+                  <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#1E231D] mb-1.5" htmlFor="signin-email">
+                        Email Address
+                      </label>
+                      <div className="relative flex items-center">
+                        <Mail className="absolute left-3.5 text-[#1E231D]/40 w-4 h-4" />
+                        <input
+                          id="signin-email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="euler@oxford.ac.uk"
+                          required
+                          type="email"
+                          className="w-full h-12 pl-10 pr-4 rounded-xl bg-[#F1F5EB] text-[#1E231D] text-sm placeholder:text-[#1E231D]/40 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#DB9558] transition-all border border-transparent focus:border-[#DB9558]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 py-1">
+                      <input
+                        id="remember-device"
+                        checked={rememberDevice}
+                        onChange={(e) => setRememberDevice(e.target.checked)}
+                        type="checkbox"
+                        className="w-4 h-4 rounded text-[#97A87A] accent-[#97A87A] cursor-pointer"
+                      />
+                      <label className="text-xs text-[#1E231D] cursor-pointer select-none" htmlFor="remember-device">
+                        Remember this workstation for 30 days
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full h-12 rounded-full bg-[#DB9558] hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-[#1E231D] text-sm font-semibold mt-2 shadow-sm disabled:opacity-50"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <span>Send 6-Digit OTP</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {/* VIEW 2: OTP VERIFICATION CODE */}
+                {mode === 'otp' && (
+                  <form onSubmit={handleVerifyOtp} className="flex flex-col gap-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#1E231D] mb-2 text-center">
+                        Enter 6-digit code
+                      </label>
+                      <div className="flex items-center justify-center gap-2 sm:gap-3">
+                        {otpCode.map((digit, index) => (
+                          <input
+                            key={index}
+                            id={`otp-box-${index}`}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpChange(index, e.target.value)}
+                            onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                            onPaste={handleOtpPaste}
+                            className="w-11 h-13 sm:w-12 sm:h-14 text-center font-mono text-xl sm:text-2xl font-bold bg-[#F1F5EB] border border-[#1E231D]/15 rounded-xl focus:bg-white focus:border-[#DB9558] focus:ring-2 focus:ring-[#DB9558] focus:outline-none transition-all text-[#1E231D]"
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full h-12 rounded-full bg-[#DB9558] hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-[#1E231D] text-sm font-semibold shadow-sm disabled:opacity-50"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4" />
+                          <span>Verify & Access Workspace</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode('signin');
+                          setErrorMsg(null);
+                        }}
+                        className="text-[#1E231D]/60 hover:text-[#1E231D] underline"
+                      >
+                        Wrong email?
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendOtp()}
+                        disabled={isLoading || cooldown > 0}
+                        className="text-[#89511A] font-medium hover:underline disabled:opacity-50 disabled:no-underline"
+                      >
+                        {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Card Base: Guest Sandbox Mode & Telemetry Guarantee */}
+                <div className="mt-6 pt-4 border-t border-[#1E231D]/5 flex flex-col gap-3">
+                  <Link
+                    href="/solve"
+                    className="w-full py-2.5 px-4 rounded-full bg-[#EBEFE6] hover:bg-[#E5EAE0] transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 text-[#1E231D] text-center"
+                  >
+                    <span className="text-xs font-semibold">Continue as Guest (Local Offline Mode)</span>
+                    <span className="text-[#1E231D]/60 text-[11px]">— Zero sync, solves client-side</span>
+                  </Link>
+
+                  <div className="flex items-center justify-center gap-1.5 pt-1 text-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#97A87A]" />
+                    <span className="text-[11px] text-[#1E231D]/60">
+                      End-to-end encrypted • Zero telemetry on exam or research data
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="w-full py-4 bg-[#FCF9EA] border-t border-[#1E231D]/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-[#1E231D]/50 text-xs font-medium">
+          Academic Identity Provider • Zero Remote Telemetry Guaranteed
+        </div>
+      </footer>
+    </div>
+  );
+}

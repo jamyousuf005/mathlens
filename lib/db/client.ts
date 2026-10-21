@@ -1,6 +1,12 @@
 import { MongoClient, Db } from 'mongodb';
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/mathlens';
+const uri = process.env.MONGODB_URI;
+
+if (!uri && process.env.NODE_ENV === 'production') {
+  throw new Error('MONGODB_URI environment variable is required in production.');
+}
+
+const connectionUri = uri || 'mongodb://localhost:27017/mathlens';
 
 interface MongoCache {
   client: MongoClient;
@@ -17,7 +23,7 @@ function getDatabaseInstance(): MongoCache {
     return global._mongoCache;
   }
 
-  const client = new MongoClient(uri);
+  const client = new MongoClient(connectionUri);
   // Synchronous client instance, driver connects automatically on first command
   const db = client.db('mathlens');
   const instance = { client, db };
