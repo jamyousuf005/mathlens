@@ -1,7 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { emailOTP } from 'better-auth/plugins';
-import { dash } from '@better-auth/infra';
 import { mongoDb } from './db/client';
 import { Resend } from 'resend';
 
@@ -58,6 +57,5 @@ export const auth = betterAuth({
       },
       expiresIn: 600, // 10 minutes
     }),
-    dash(),
   ],
 });
