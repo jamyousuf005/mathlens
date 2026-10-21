@@ -28,6 +28,7 @@ export async function GET() {
 
   let directAuthResult = null;
   let directAuthError = null;
+  let caughtBetterAuthError = null;
 
   try {
     const testReq = new Request('https://mathlens-rho.vercel.app/api/auth/sign-in/social', {
@@ -42,11 +43,28 @@ export async function GET() {
       }),
     });
 
+    // Temporarily attach an onAPIError listener to capture internal Better Auth throws
+    (auth.options as any).onAPIError = {
+      onError: async (error: any) => {
+        caughtBetterAuthError = {
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack,
+          status: error?.status,
+          code: error?.code,
+          cause: error?.cause ? String(error?.cause) : null,
+        };
+      },
+      throw: false,
+    };
+
     const res = await auth.handler(testReq);
     const bodyText = await res.text();
     directAuthResult = {
       status: res.status,
+      headers: Object.fromEntries(res.headers.entries()),
       body: bodyText,
+      caughtError: caughtBetterAuthError,
     };
   } catch (err: unknown) {
     const error = err as Error;
