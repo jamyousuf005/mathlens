@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Link from "next/link";
 
 export default function UploadSolvePage() {
@@ -10,6 +10,25 @@ export default function UploadSolvePage() {
   const [uploadFeedbackText, setUploadFeedbackText] = useState<string | null>(null);
   const [isUploadStarred, setIsUploadStarred] = useState(false);
   const [copiedUploadType, setCopiedUploadType] = useState<"latex" | "plain" | null>(null);
+  const [customImage, setCustomImage] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("calc_worksheet_problem_04.png");
+  const [fileSize, setFileSize] = useState("1.4 MB");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFileName(file.name);
+      setFileSize((file.size / (1024 * 1024)).toFixed(2) + " MB");
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setCustomImage(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleCopyUploadLatex = async () => {
     try {
@@ -93,14 +112,15 @@ export default function UploadSolvePage() {
                   <div className="bg-surface rounded-xl shadow-sm p-space-md flex flex-col gap-space-md border border-hairline">
                     {/* Image Viewport with Bounding Box & Canvas Emulation */}
                     <div className="relative w-full rounded-lg overflow-hidden bg-surface-container-low min-h-[380px] flex items-center justify-center p-4">
-                      {/* Real photo placeholder of handwritten math note on grid paper */}
+                      {/* Real photo placeholder or user-uploaded file */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         className={`w-full h-80 object-cover rounded shadow-inner transition-all duration-300 ${
                           isUploadInverted ? 'invert hue-rotate-180' : ''
                         }`}
                         style={{ transform: `rotate(${uploadRotation}deg)` }}
-                        alt="Handwritten calculus worksheet with quadratic equation x^2 - 5x + 6 = 0"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRyP8JziTWzfAn9NRXPrubGscijbTCcbNlcIwlk2YeX7w7x4qOwK88VxAiXWmmAGogb8a1M38Yor_O4eaNpegGtU8NcCpLZdrjxeNDQBjrvz17QHnsLjIZqpbrjTfnJ1UzbG-G8DiJWNoM0SbtcblsnO1mlt_CKLFX5zcDi-UAju4moEGlSTzYfOFKbTmzGMJ6UQyOvcwMB4Yf5ZPjpBcnVYuD1iClrZjSVvKNsH9tQOCLZCqHxCCBcg"
+                        alt="Handwritten math worksheet"
+                        src={customImage || "https://lh3.googleusercontent.com/aida-public/AB6AXuDRyP8JziTWzfAn9NRXPrubGscijbTCcbNlcIwlk2YeX7w7x4qOwK88VxAiXWmmAGogb8a1M38Yor_O4eaNpegGtU8NcCpLZdrjxeNDQBjrvz17QHnsLjIZqpbrjTfnJ1UzbG-G8DiJWNoM0SbtcblsnO1mlt_CKLFX5zcDi-UAju4moEGlSTzYfOFKbTmzGMJ6UQyOvcwMB4Yf5ZPjpBcnVYuD1iClrZjSVvKNsH9tQOCLZCqHxCCBcg"}
                       />
                       {/* Visual Scrim & Grid Guideline Overlay */}
                       <div className="absolute inset-0 bg-ink/5 pointer-events-none"></div>
@@ -135,10 +155,10 @@ export default function UploadSolvePage() {
                     <div className="flex flex-wrap items-center justify-between gap-space-xs p-space-sm rounded-lg bg-surface-container-low font-code-sm text-code-sm text-ink border border-hairline">
                       <div className="flex items-center gap-2 truncate">
                         <span className="material-symbols-outlined text-outline text-[18px]">draft</span>
-                        <span className="font-medium truncate">calc_worksheet_problem_04.png</span>
+                        <span className="font-medium truncate">{fileName}</span>
                       </div>
                       <div className="flex items-center gap-2 text-ink-muted">
-                        <span>1.4 MB</span>
+                        <span>{fileSize}</span>
                         <span>•</span>
                         <span>2400×1600 px</span>
                         <span>•</span>
@@ -190,7 +210,17 @@ export default function UploadSolvePage() {
                     </div>
 
                     {/* Drag and Drop Active Receptor Area */}
-                    <div className="rounded-lg p-space-md flex flex-col items-center justify-center text-center gap-2 bg-canvas/70 hover:bg-canvas transition-colors cursor-pointer group border border-hairline border-dashed">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,.pdf,.svg"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-lg p-space-md flex flex-col items-center justify-center text-center gap-2 bg-canvas/70 hover:bg-canvas transition-colors cursor-pointer group border border-hairline border-dashed"
+                    >
                       <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center shadow-sm text-primary group-hover:scale-105 transition-transform">
                         <span className="material-symbols-outlined text-[22px]">cloud_upload</span>
                       </div>

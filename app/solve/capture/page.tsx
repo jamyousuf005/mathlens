@@ -85,9 +85,9 @@ export default function CaptureSolvePage() {
               </section>
 
               {/* Main Two-Column Layout */}
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
                 {/* LEFT COLUMN: Live Viewfinder & Optical Capture Engine (~52%) */}
-                <section className="xl:col-span-6 flex flex-col gap-space-md">
+                <section className="lg:col-span-6 flex flex-col gap-space-md">
                   {/* Viewfinder Outer Housing */}
                   <div className="relative w-full rounded-xl bg-ink overflow-hidden p-space-sm flex flex-col gap-space-sm shadow-md">
                     {/* Top Utility Bar within Camera HUD */}
@@ -251,7 +251,11 @@ export default function CaptureSolvePage() {
                         )}
                       </button>
                       <button
-                        onClick={() => {}}
+                        onClick={() => {
+                          const devices = ['facetime', 'external', 'macro'];
+                          const nextIdx = (devices.indexOf(cameraDevice) + 1) % devices.length;
+                          setCameraDevice(devices[nextIdx]);
+                        }}
                         className="w-full sm:w-auto h-12 px-space-lg rounded-full bg-surface-container-highest/20 hover:bg-surface-container-highest/30 text-white font-body-sm text-body-sm transition-colors flex items-center justify-center gap-space-xs cursor-pointer"
                         id="btn-retake"
                         type="button"
@@ -320,7 +324,7 @@ export default function CaptureSolvePage() {
                 </section>
 
                 {/* RIGHT COLUMN: OCR Segmentation, Canonical Proof & Step-by-Step Derivation (~48%) */}
-                <section className="xl:col-span-6 flex flex-col gap-space-md">
+                <section className="lg:col-span-6 flex flex-col gap-space-md">
                   {/* OCR Extraction Status Header Card */}
                   <div className="rounded-xl bg-surface p-space-md shadow-sm flex flex-col gap-space-md border border-hairline">
                     <div className="flex items-center justify-between flex-wrap gap-space-xs">
