@@ -10,8 +10,12 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     console.error('[AUTH_GET_ERROR]', error);
+    const isDev = process.env.NODE_ENV !== 'production';
     return NextResponse.json(
-      { error: 'Internal Server Error', message: error?.message, stack: error?.stack },
+      {
+        error: 'Internal Server Error',
+        ...(isDev ? { message: error?.message, stack: error?.stack } : {}),
+      },
       { status: 500 }
     );
   }
@@ -23,8 +27,12 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     console.error('[AUTH_POST_ERROR]', error);
+    const isDev = process.env.NODE_ENV !== 'production';
     return NextResponse.json(
-      { error: 'Internal Server Error', message: error?.message, stack: error?.stack },
+      {
+        error: 'Internal Server Error',
+        ...(isDev ? { message: error?.message, stack: error?.stack } : {}),
+      },
       { status: 500 }
     );
   }

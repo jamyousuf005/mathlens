@@ -40,7 +40,7 @@ export default function AuthPage() {
       setErrorMsg(null);
       await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/welcome',
+        callbackURL: '/solve/capture',
       });
     } catch (err: unknown) {
       console.error(err);
@@ -124,7 +124,7 @@ export default function AuthPage() {
         return;
       }
 
-      router.push('/welcome');
+      router.push('/solve/capture');
     } catch (err: unknown) {
       console.error(err);
       setErrorMsg('Verification failed. Please check the code and try again.');
@@ -515,7 +515,7 @@ export default function AuthPage() {
                 {/* Card Base: Guest Sandbox Mode & Telemetry Guarantee */}
                 <div className="mt-6 pt-4 border-t border-[#1E231D]/5 flex flex-col gap-3">
                   <Link
-                    href="/solve"
+                    href="/solve/capture"
                     className="w-full py-2.5 px-4 rounded-full bg-[#EBEFE6] hover:bg-[#E5EAE0] transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 text-[#1E231D] text-center"
                   >
                     <span className="text-xs font-semibold">Continue as Guest (Local Offline Mode)</span>

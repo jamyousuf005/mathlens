@@ -175,7 +175,7 @@ export default function Home() {
               <Link href="/auth">Sign In</Link>
             </Button>
             <Button variant="default" size="sm" asChild className="h-9 px-3.5 sm:h-10 sm:px-5">
-              <Link href="/solve">
+              <Link href="/solve/capture">
                 <span className="hidden xs:inline">Launch</span> Solver
               </Link>
             </Button>
@@ -220,7 +220,7 @@ export default function Home() {
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md mx-auto mb-6 sm:mb-8 px-2">
               <Button size="lg" asChild className="w-full sm:w-auto flex-1 h-12 sm:h-[54px]">
-                <Link href="/solve" className="flex items-center justify-center gap-2">
+                <Link href="/solve/capture" className="flex items-center justify-center gap-2">
                   <span>Launch Solver</span>
                   <span className="font-mono text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-surface/30 font-normal">Guest Mode</span>
                   <ArrowRight className="w-4 h-4 ml-0.5 shrink-0" />
@@ -621,7 +621,7 @@ export default function Home() {
               </p>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md">
                 <Button size="lg" asChild className="w-full sm:w-auto flex-1 h-12 sm:h-[52px]">
-                  <Link href="/solve" className="flex items-center justify-center gap-2">
+                  <Link href="/solve/capture" className="flex items-center justify-center gap-2">
                     <span>Launch Solver Now</span>
                     <Zap className="w-4 h-4 shrink-0" />
                   </Link>
