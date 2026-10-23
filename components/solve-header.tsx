@@ -10,11 +10,6 @@ export default function SolveHeader() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-  };
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +50,12 @@ export default function SolveHeader() {
       isActive: pathname === '/solve/write',
     },
     {
+      name: 'Type & Solve',
+      href: '/solve/type',
+      icon: 'keyboard',
+      isActive: pathname === '/solve/type',
+    },
+    {
       name: 'Notebook',
       href: '/solve/notebook',
       icon: 'menu_book',
@@ -88,7 +89,7 @@ export default function SolveHeader() {
           </Link>
           <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container font-code-sm text-[11px] text-ink-muted">
             <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-            <span>WASM v1.0</span>
+            <span>TS CAS v1.0</span>
           </div>
         </div>
 
@@ -111,18 +112,6 @@ export default function SolveHeader() {
 
         {/* Right Actions: Session User & Sign Out */}
         <div className="flex items-center gap-1.5 sm:gap-2 relative shrink-0">
-          <button
-            aria-label="Toggle visual theme"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-ink-muted hover:text-ink hover:bg-surface-container transition-colors cursor-pointer"
-            type="button"
-            onClick={toggleTheme}
-            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              {isDark ? 'dark_mode' : 'light_mode'}
-            </span>
-          </button>
-
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}

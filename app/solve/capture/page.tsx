@@ -3,7 +3,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { solveMathProblem } from '@/lib/engine/solver';
 import { SolutionResult } from '@/lib/engine/types';
+import { saveHistory, setHistoryFavorite } from '@/lib/history';
+import { CompleteSolutionNarrative } from '@/components/solve/complete-solution-narrative';
 
+async function getVideoInputs(): Promise<MediaDeviceInfo[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices.filter((device) => device.kind === 'videoinput');
+}
 
 export default function CaptureSolvePage() {
   // Camera & Stream State
@@ -11,14 +18,15 @@ export default function CaptureSolvePage() {
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
   const [compositionGrid, setCompositionGrid] = useState<boolean>(true);
   const [flashActive, setFlashActive] = useState<boolean>(false);
 
   // Capture, OCR & Processing State
   const [isProcessingCapture, setIsProcessingCapture] = useState<boolean>(false);
   const [captureFeedbackText, setCaptureFeedbackText] = useState<string | null>(null);
-  const [ocrConfidence, setOcrConfidence] = useState<number>(99.4);
-  const [ocrEngine, setOcrEngine] = useState<'hybrid' | 'gemini' | 'wasm'>('hybrid');
+  const [ocrConfidence, setOcrConfidence] = useState<number>(0);
+  const [ocrEngine] = useState<'hybrid' | 'gemini' | 'wasm'>('hybrid');
   const [activeEngineUsed, setActiveEngineUsed] = useState<string>('Gemini 2.5 Flash');
   const [capturedSnapshot, setCapturedSnapshot] = useState<string | null>(null);
 
@@ -29,32 +37,39 @@ export default function CaptureSolvePage() {
     // Ensure deterministic executionTime for initial SSR render
     return { ...s, executionTimeMs: 0.5 };
   });
-  const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [isEditingConfirm, setIsEditingConfirm] = useState<boolean>(false);
   const [editBuffer, setEditBuffer] = useState<string>('x^2 - 5x + 6 = 0');
 
   // Bookmarking & Feedback
   const [isCaptureStarred, setIsCaptureStarred] = useState<boolean>(false);
   const [copiedCaptureType, setCopiedCaptureType] = useState<'latex' | 'steps' | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
 
   // DOM Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showCameraNotice = (message: string) => {
+    setCameraNotice(message);
+    if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    noticeTimeoutRef.current = setTimeout(() => setCameraNotice(null), 3000);
+  };
 
   // 1. Initialize Camera and enumerate physical devices
   useEffect(() => {
-    async function initCamera() {
+    let cancelled = false;
 
+    async function initCamera() {
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           setCameraError('Camera API (getUserMedia) not supported in this browser.');
           return;
         }
 
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
-        setAvailableDevices(videoInputs);
+        setAvailableDevices(await getVideoInputs());
 
         const constraints: MediaStreamConstraints = {
           video: {
@@ -65,49 +80,108 @@ export default function CaptureSolvePage() {
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
         setIsCameraActive(true);
         setCameraError(null);
+
+        // Device labels and availability are only exposed after permission is granted.
+        setAvailableDevices(await getVideoInputs());
       } catch (err: unknown) {
         console.warn('Camera access error or permission denied:', err);
-        setCameraError('Camera access denied or unavailable. Using high-resolution optical calibration feed.');
-        setIsCameraActive(false);
+        if (!cancelled) {
+          setCameraError('Camera access denied or unavailable. Using high-resolution optical calibration feed.');
+          setIsCameraActive(false);
+        }
       }
     }
 
     initCamera();
 
     return () => {
-      // Clean up stream tracks on unmount
+      cancelled = true;
+      if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
+  // Attach the stream once the video element mounts after camera activation.
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      void videoRef.current.play().catch(() => undefined);
+    }
+  }, [isCameraActive]);
+
+  // Keep the device list in sync when cameras are plugged in or removed.
+  useEffect(() => {
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+
+    const handleDeviceChange = () => {
+      getVideoInputs()
+        .then(setAvailableDevices)
+        .catch(() => setAvailableDevices([]));
+    };
+
+    mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  }, []);
+
   // Switch camera when user selects device
   const handleDeviceChange = async (deviceId: string) => {
-    setCameraDevice(deviceId);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
+    const previousStream = streamRef.current;
+
     try {
       const constraints: MediaStreamConstraints = {
         video: deviceId === 'default' ? { facingMode: 'environment' } : { deviceId: { exact: deviceId } },
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      previousStream?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        void videoRef.current.play().catch(() => undefined);
       }
+      setCameraDevice(deviceId);
       setIsCameraActive(true);
       setCameraError(null);
+      setCameraNotice(null);
+      setAvailableDevices(await getVideoInputs());
     } catch {
+      // Keep the previous working stream if the requested camera cannot be opened.
       setCameraError('Could not switch to chosen device.');
     }
+  };
+
+  const handleSwitchCamera = async () => {
+    let devices: MediaDeviceInfo[] = [];
+    try {
+      devices = await getVideoInputs();
+      setAvailableDevices(devices);
+    } catch {
+      showCameraNotice('Unable to list camera devices.');
+      return;
+    }
+
+    if (devices.length <= 1) {
+      showCameraNotice(devices.length === 0 ? 'No camera devices detected.' : 'Only one camera is available on this device.');
+      return;
+    }
+
+    const currentIndex = devices.findIndex((device) => device.deviceId === cameraDevice);
+    const nextDevice = devices[(currentIndex + 1) % devices.length];
+    await handleDeviceChange(nextDevice.deviceId);
   };
 
   // 2. Real Frame Capture + OCR Processing Pipeline
@@ -188,7 +262,6 @@ export default function CaptureSolvePage() {
           }
 
           await worker.terminate();
-          console.log('MathLens Local Tesseract Scan:', localTesseractCandidate, 'Conf:', tesseractConfidence);
         } catch (tessErr) {
           console.warn('Tesseract scan skipped or failed:', tessErr);
         }
@@ -221,7 +294,6 @@ export default function CaptureSolvePage() {
               confScore = data.confidence || 98.0;
               geminiSuccess = true;
               engineLabel = localTesseractCandidate ? 'Ensemble: Tesseract + Gemini' : 'Gemini 2.5 Flash';
-              console.log('Hybrid Ensemble Success:', rawOcrText, 'From hint:', localTesseractCandidate);
             }
           }
         } catch (apiErr) {
@@ -233,17 +305,15 @@ export default function CaptureSolvePage() {
       if (!geminiSuccess) {
         rawOcrText = localTesseractCandidate;
         confScore = tesseractConfidence || 75.0;
-        engineLabel = 'Local WASM (Tesseract)';
+        engineLabel = 'Local Tesseract';
       }
 
 
       setActiveEngineUsed(engineLabel);
-      console.log('MathLens OCR Output:', rawOcrText, 'Engine:', engineLabel);
 
       // Clean and normalize using engine normalizer
       const { normalizeMathExpression } = await import('@/lib/engine/normalizer');
       const normalizedOcr = normalizeMathExpression(rawOcrText);
-      console.log('MathLens Normalized OCR Expression:', normalizedOcr);
 
       if (!normalizedOcr || normalizedOcr.length < 2) {
         setCaptureFeedbackText('No math symbols detected. Reposition camera.');
@@ -256,17 +326,16 @@ export default function CaptureSolvePage() {
       setOcrConfidence(Number(confScore.toFixed(1)));
       setCurrentExpression(normalizedOcr);
       setEditBuffer(normalizedOcr);
+      setIsEditingConfirm(true);
+      setHistoryId(null);
+      setHistoryNotice(null);
+      setIsCaptureStarred(false);
 
-      // Solve the newly read equation with deterministic CAS
-      setCaptureFeedbackText('Compiling Analytical Proof...');
-      const sol = solveMathProblem(normalizedOcr);
-      setSolution(sol);
-
-      setCaptureFeedbackText(`Solved via ${engineLabel} in ${sol.executionTimeMs}ms`);
+      setCaptureFeedbackText(`Recognized via ${engineLabel}. Confirm the expression to solve.`);
       setTimeout(() => {
         setIsProcessingCapture(false);
         setCaptureFeedbackText(null);
-      }, 1200);
+      }, 1400);
     } catch (err: unknown) {
       console.warn('OCR error during capture:', err);
       const msg = err instanceof Error ? err.message : 'Camera capture error';
@@ -280,11 +349,50 @@ export default function CaptureSolvePage() {
   };
 
   // 3. Confirm Step: Solve edited expression
-  const handleConfirmEdit = () => {
-    setCurrentExpression(editBuffer);
+  const handleConfirmEdit = async () => {
     const sol = solveMathProblem(editBuffer);
+    if (!sol.success) {
+      setCameraError(sol.error || 'The expression could not be solved. Check the syntax.');
+      return;
+    }
+
+    setCurrentExpression(sol.normalizedExpression);
+    setEditBuffer(sol.normalizedExpression);
     setSolution(sol);
     setIsEditingConfirm(false);
+    setCameraError(null);
+
+    try {
+      const record = await saveHistory({
+        expression: sol.normalizedExpression,
+        latex: sol.finalAnswerLatex || sol.normalizedExpression,
+        recognizedText: currentExpression,
+        problemType: sol.problemType,
+        inputType: 'camera',
+        finalAnswerPlain: sol.finalAnswerPlain,
+        finalAnswerLatex: sol.finalAnswerLatex,
+        isVerified: sol.isVerified,
+        steps: sol.steps,
+      });
+      setHistoryId(record.id);
+      setHistoryNotice('Confirmed result saved to Notebook.');
+    } catch {
+      setHistoryId(null);
+      setHistoryNotice('Could not save this result to Notebook.');
+    }
+  };
+
+  const handleCaptureFavorite = async () => {
+    if (!historyId) return;
+    const next = !isCaptureStarred;
+    setIsCaptureStarred(next);
+    try {
+      await setHistoryFavorite(historyId, next);
+      setHistoryNotice(next ? 'Saved to Favorites.' : 'Removed from Favorites.');
+    } catch {
+      setIsCaptureStarred(!next);
+      setHistoryNotice('Could not update Favorites.');
+    }
   };
 
   const handleCopyCaptureLatex = async () => {
@@ -322,35 +430,46 @@ export default function CaptureSolvePage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-amber"></span>
                 METHOD 01 • WEBCAM &amp; OPTICAL SCANNER
               </span>
-              <span className="font-code-sm text-code-sm text-ink-muted">CLIENT RUNTIME CAS v4.12</span>
+              <span className="font-code-sm text-code-sm text-ink-muted">CLIENT RUNTIME CAS</span>
             </div>
             <h1 className="font-headline-xl text-headline-xl text-ink tracking-tight font-semibold">
               Capture Photo &amp; Solve
             </h1>
             <p className="font-body-lg text-body-lg text-ink-muted leading-relaxed">
-              Align any handwritten notes or printed textbook problem in front of your camera. Instant local frame capture, OCR segmentation, and deterministic analytical proof.
+                Align a handwritten note or printed problem inside the frame, capture it, then review the recognized expression before solving.
             </p>
           </div>
 
           {/* Engine Status Dashboard Strip */}
-          <div className="flex items-center gap-space-md bg-surface p-2.5 rounded-xl border border-hairline shadow-card self-start lg:self-auto">
-            <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
-              <span className="font-caption text-caption text-ink-muted uppercase">Execution Target</span>
-              <span className="font-code-sm text-code-sm font-bold text-ink flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-sage"></span>
-                SymPy-WASM
+          <div className="grid w-full grid-cols-3 gap-2 self-start rounded-xl border border-hairline bg-surface p-2.5 shadow-card sm:flex sm:w-auto sm:items-center sm:gap-space-md lg:self-auto">
+            <div className="flex min-w-0 flex-col border-r border-hairline pr-2 sm:px-space-xs sm:pr-space-md">
+              <span className="font-caption text-[9px] leading-tight text-ink-muted uppercase sm:text-caption">
+                <span className="sm:hidden">Engine</span>
+                <span className="hidden sm:inline">Execution Target</span>
+              </span>
+              <span className="font-code-sm whitespace-nowrap text-[11px] font-bold text-ink sm:text-code-sm">
+                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-sage align-middle"></span>
+                TypeScript CAS
               </span>
             </div>
-            <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
-              <span className="font-caption text-caption text-ink-muted uppercase">Latency</span>
-              <span className="font-code-sm text-code-sm font-bold text-ink" suppressHydrationWarning>
-                {hasMounted ? `${solution.executionTimeMs} ms` : '< 1 ms'}
+            <div className="flex min-w-0 flex-col border-r border-hairline pr-2 sm:px-space-xs sm:pr-space-md">
+              <span className="font-caption text-[9px] leading-tight text-ink-muted uppercase sm:text-caption">
+                <span className="sm:hidden">Time</span>
+                <span className="hidden sm:inline">Latency</span>
+              </span>
+              <span className="font-code-sm whitespace-nowrap text-[11px] font-bold text-ink sm:text-code-sm">
+                {solution.executionTimeMs} ms
               </span>
             </div>
-            <div className="flex flex-col px-space-xs">
-              <span className="font-caption text-caption text-ink-muted uppercase">Privacy Guarantee</span>
-              <span className="font-code-sm text-code-sm font-bold text-secondary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px]">shield</span> Local Only
+            <div className="flex min-w-0 flex-col sm:px-space-xs">
+              <span className="font-caption text-[9px] leading-tight text-ink-muted uppercase sm:text-caption">
+                <span className="sm:hidden">AI</span>
+                <span className="hidden sm:inline">AI Scope</span>
+              </span>
+              <span className="font-code-sm flex items-center gap-1 whitespace-nowrap text-[11px] font-bold text-secondary sm:text-code-sm">
+                <span className="material-symbols-outlined text-[13px] sm:text-[14px]">shield</span>
+                <span className="sm:hidden">OCR</span>
+                <span className="hidden truncate sm:inline">OCR only</span>
               </span>
             </div>
           </div>
@@ -361,41 +480,45 @@ export default function CaptureSolvePage() {
           {/* LEFT COLUMN: Live Viewfinder & Optical Capture Engine */}
           <section className="xl:col-span-6 flex flex-col gap-space-md">
             {/* Viewfinder Outer Housing */}
-            <div className="relative w-full rounded-xl bg-ink overflow-hidden p-space-sm flex flex-col gap-space-sm shadow-md">
+            <div className="relative flex w-full flex-col gap-2 overflow-hidden rounded-xl bg-ink p-2 shadow-md sm:gap-space-sm sm:p-space-sm">
               {/* Top Utility Bar within Camera HUD */}
-              <div className="relative z-20 flex items-center justify-between gap-space-sm px-space-sm py-1 bg-ink/80 backdrop-blur-md rounded-lg">
-                <div className="flex items-center gap-space-xs">
-                  <span className={`w-2 h-2 rounded-full ${isCameraActive ? 'bg-secondary animate-pulse' : 'bg-amber'}`}></span>
-                  <span className="font-code-sm text-code-sm text-white tracking-wider">
-                    {isCameraActive ? 'LIVE WEBCAM' : 'OPTICAL FEED'}
+              <div className="relative z-20 flex min-w-0 items-center justify-between gap-1.5 rounded-lg bg-ink/80 px-2 py-1.5 backdrop-blur-md sm:gap-space-sm sm:px-space-sm sm:py-1">
+                <div className="flex min-w-0 items-center gap-1.5 sm:gap-space-xs">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${isCameraActive ? 'bg-secondary animate-pulse' : 'bg-amber'}`}></span>
+                  <span className="whitespace-nowrap font-code-sm text-[10px] tracking-wider text-white sm:text-code-sm">
+                    <span className="sm:hidden">{isCameraActive ? 'LIVE' : 'OPTICAL'}</span>
+                    <span className="hidden sm:inline">{isCameraActive ? 'LIVE WEBCAM' : 'OPTICAL FEED'}</span>
                   </span>
-                  <span className="hidden sm:inline font-code-sm text-code-sm text-surface-dim opacity-70">
+                  <span className="hidden font-code-sm text-code-sm text-surface-dim opacity-70 sm:inline">
                     | {availableDevices.length > 0 ? `${availableDevices.length} CAM` : 'DEV:0'}
                   </span>
                 </div>
-                <div className="flex items-center gap-space-xs">
+                <div className="flex shrink-0 items-center gap-1 sm:gap-space-xs">
                   <div className="relative inline-block text-left">
                     <select
                       value={cameraDevice}
                       onChange={(e) => handleDeviceChange(e.target.value)}
-                      className="appearance-none bg-surface-container-highest/20 hover:bg-surface-container-highest/30 text-white font-code-sm text-code-sm py-1 pl-space-sm pr-7 rounded cursor-pointer transition-colors focus:outline-none max-w-[140px] sm:max-w-none truncate"
+                      className="h-11 max-w-[92px] cursor-pointer appearance-none truncate rounded-lg bg-surface-container-highest/20 py-0 pl-2 pr-7 font-code-sm text-[10px] text-white transition-colors hover:bg-surface-container-highest/30 focus:outline-none sm:h-8 sm:max-w-none sm:pl-space-sm sm:pr-7 sm:text-code-sm"
                       id="camera-select"
+                      aria-label="Select camera"
                     >
-                      <option className="bg-ink text-white" value="default">Default Camera</option>
+                      <option className="bg-ink text-white" value="default">Default</option>
                       {availableDevices.map((d, idx) => (
                         <option key={d.deviceId || idx} className="bg-ink text-white" value={d.deviceId}>
                           {d.label || `Camera ${idx + 1}`}
                         </option>
                       ))}
                     </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-1.5 top-1.5 text-white text-[16px]">expand_more</span>
+                    <span className="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[16px] text-white">expand_more</span>
                   </div>
                   <button
                     onClick={() => setCompositionGrid(!compositionGrid)}
-                    className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-lg transition-colors cursor-pointer sm:h-7 sm:w-7 ${
                       compositionGrid ? 'bg-amber text-ink' : 'bg-surface-container-highest/20 hover:bg-surface-container-highest/40 text-white'
                     }`}
                     id="grid-toggle-btn"
+                    aria-label="Toggle composition grid"
+                    aria-pressed={compositionGrid}
                     title="Toggle Composition Grid"
                     type="button"
                   >
@@ -403,10 +526,12 @@ export default function CaptureSolvePage() {
                   </button>
                   <button
                     onClick={() => setFlashActive(!flashActive)}
-                    className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-lg transition-colors cursor-pointer sm:h-7 sm:w-7 ${
                       flashActive ? 'bg-amber text-ink' : 'bg-surface-container-highest/20 hover:bg-surface-container-highest/40 text-white'
                     }`}
                     id="flash-toggle-btn"
+                    aria-label="Toggle contrast illumination"
+                    aria-pressed={flashActive}
                     title="Toggle Contrast Illumination"
                     type="button"
                   >
@@ -418,7 +543,7 @@ export default function CaptureSolvePage() {
               {/* Camera Stream / Video Surface */}
               <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-ink select-none flex items-center justify-center">
                 {cameraError && (
-                  <div className="absolute top-12 inset-x-4 z-30 p-2.5 rounded bg-error/90 text-white text-xs font-medium text-center">
+                  <div className="absolute inset-x-2 top-2 z-30 rounded-lg bg-error/95 px-3 py-2 text-center text-[11px] font-medium text-white sm:inset-x-4 sm:top-12 sm:text-xs">
                     {cameraError}
                   </div>
                 )}
@@ -429,7 +554,7 @@ export default function CaptureSolvePage() {
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-full object-cover transition-all duration-300 ${flashActive ? 'brightness-125 contrast-125' : ''}`}
+                    className={`absolute inset-0 h-full w-full object-cover transition-all duration-300 ${flashActive ? 'brightness-125 contrast-125' : ''}`}
                   />
                 ) : (
                   <div
@@ -458,12 +583,17 @@ export default function CaptureSolvePage() {
                 )}
 
                 {/* Viewfinder Center Scan Guidance Banner */}
-                <div className="absolute top-space-md left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-                  <div className="px-space-md py-1 rounded-full bg-ink/80 backdrop-blur-md shadow-sm flex items-center gap-space-xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber animate-ping"></span>
-                    <span className="font-code-sm text-code-sm text-white tracking-tight">Align equation within amber corner guides</span>
+                {!cameraError && (
+                  <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex justify-center sm:top-space-md">
+                    <div className="flex max-w-full items-center gap-1 rounded-full bg-ink/80 px-2 py-0.5 shadow-sm backdrop-blur-md sm:gap-space-xs sm:px-space-md sm:py-1">
+                      <span className="h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-amber"></span>
+                      <span className="truncate whitespace-nowrap font-code-sm text-[10px] tracking-tight text-white sm:text-code-sm">
+                        <span className="sm:hidden">Align equation inside frame</span>
+                        <span className="hidden sm:inline">Align equation within amber corner guides</span>
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Precision Amber Corner Crop Targeting Frame */}
                 <div className="relative z-10 w-[78%] h-[58%] rounded flex items-center justify-center p-space-md pointer-events-none">
@@ -487,18 +617,20 @@ export default function CaptureSolvePage() {
                   {/* Center Bounding Box Scan Line */}
                   <div className="w-full h-full relative overflow-hidden rounded bg-amber/5 flex items-center justify-center">
                     <div className="absolute inset-x-0 h-0.5 bg-amber opacity-80 animate-[bounce_3s_infinite] shadow-[0_0_12px_rgba(219,149,88,1)]"></div>
-                    <span className="font-code-sm text-code-sm text-amber font-mono bg-ink/70 px-2 py-0.5 rounded tracking-widest uppercase">
-                      AST • LATEX DETECTED
+                    <span className="max-w-full truncate rounded bg-ink/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-amber sm:px-2 sm:font-code-sm sm:tracking-widest">
+                      <span className="sm:hidden">Scan area</span>
+                      <span className="hidden sm:inline">AST • LATEX DETECTED</span>
                     </span>
                   </div>
                 </div>
 
                 {/* Optical Shutter Button Pin */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
+                <div className="absolute bottom-4 left-1/2 z-20 hidden -translate-x-1/2 flex-col items-center gap-1 sm:flex">
                   <button
                     onClick={handleCaptureAndSolve}
                     className="w-16 h-16 rounded-full bg-surface/20 backdrop-blur-md p-1 hover:scale-105 active:scale-95 transition-transform flex items-center justify-center cursor-pointer group"
                     id="shutter-trigger"
+                    aria-label="Capture frame"
                     title="Capture Frame"
                     type="button"
                   >
@@ -511,69 +643,30 @@ export default function CaptureSolvePage() {
                 </div>
 
                 {/* Realtime Telemetry HUD Footer */}
-                <div className="absolute bottom-space-xs inset-x-space-xs px-space-sm py-1 rounded bg-ink/80 backdrop-blur-sm flex items-center justify-between text-surface-dim font-code-sm text-code-sm">
-                  <div className="flex items-center gap-space-sm">
-                    <span className="flex items-center gap-1 text-secondary-fixed">
-                      <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                      30 FPS
+                <div className="absolute inset-x-2 bottom-2 z-20 flex items-center justify-between rounded bg-ink/80 px-2 py-1 font-code-sm text-[10px] text-surface-dim backdrop-blur-sm sm:inset-x-space-xs sm:bottom-space-xs sm:px-space-sm sm:text-code-sm">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-space-sm">
+                    <span className="flex shrink-0 items-center gap-1 text-secondary-fixed">
+                      <span className="h-1.5 w-1.5 rounded-full bg-secondary"></span>
+                      LIVE
                     </span>
-                    <span className="hidden sm:inline text-surface-dim opacity-70">{activeEngineUsed}</span>
+                    <span className="hidden truncate text-surface-dim opacity-70 sm:inline">{activeEngineUsed}</span>
                   </div>
-                  <div className="flex items-center gap-space-sm">
-                    <span className="text-surface-dim">Confidence: {ocrConfidence}%</span>
-                    <span className="font-mono text-amber">{solution.executionTimeMs}ms</span>
+                  <div className="flex shrink-0 items-center gap-2 sm:gap-space-sm">
+                    <span className="whitespace-nowrap text-surface-dim">
+                      <span className="sm:hidden">{ocrConfidence > 0 ? `Conf ${ocrConfidence}%` : 'OCR ready'}</span>
+                      <span className="hidden sm:inline">{ocrConfidence > 0 ? `Confidence: ${ocrConfidence}%` : 'OCR ready'}</span>
+                    </span>
+                    <span className="hidden font-mono text-amber sm:inline">{solution.executionTimeMs}ms</span>
                   </div>
                 </div>
               </div>
 
-              {/* Engine Switcher Ribbon */}
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-surface-container-low border border-hairline text-xs">
-                <span className="font-medium text-ink flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-amber text-[16px]">psychology</span>
-                  Detection Engine:
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setOcrEngine('hybrid')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                      ocrEngine === 'hybrid'
-                        ? 'bg-amber text-ink font-semibold shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-container'
-                    }`}
-                  >
-                    Hybrid AI (Gemini + Local)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOcrEngine('gemini')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                      ocrEngine === 'gemini'
-                        ? 'bg-amber text-ink font-semibold shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-container'
-                    }`}
-                  >
-                    Gemini 2.5 Only
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOcrEngine('wasm')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                      ocrEngine === 'wasm'
-                        ? 'bg-amber text-ink font-semibold shadow-xs'
-                        : 'text-ink-muted hover:text-ink hover:bg-surface-container'
-                    }`}
-                  >
-                    Offline WASM
-                  </button>
-                </div>
-              </div>
 
               {/* Bottom Viewfinder Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-space-sm pt-space-xs">
                 <button
                   onClick={handleCaptureAndSolve}
-                  className="w-full sm:flex-1 h-14 rounded-full bg-amber text-ink font-headline-sm text-body-lg font-semibold flex items-center justify-center gap-space-xs hover:bg-primary-fixed active:scale-[0.99] transition-all shadow-sm cursor-pointer"
+                  className="flex h-14 w-full cursor-pointer items-center justify-center gap-space-xs rounded-full bg-amber px-3 text-center text-[13px] font-semibold leading-tight text-ink shadow-sm transition-all hover:bg-primary-fixed active:scale-[0.99] sm:flex-1 sm:text-body-lg"
                   id="btn-primary-capture"
                   type="button"
                 >
@@ -590,16 +683,8 @@ export default function CaptureSolvePage() {
                   )}
                 </button>
                 <button
-                  onClick={() => {
-                    if (availableDevices.length > 1) {
-                      const curIdx = availableDevices.findIndex((d) => d.deviceId === cameraDevice);
-                      const nextDevice = availableDevices[(curIdx + 1) % availableDevices.length];
-                      handleDeviceChange(nextDevice.deviceId);
-                    } else {
-                      handleCaptureAndSolve();
-                    }
-                  }}
-                  className="w-full sm:w-auto h-12 px-space-lg rounded-full bg-surface-container-highest/20 hover:bg-surface-container-highest/30 text-white font-body-sm text-body-sm transition-colors flex items-center justify-center gap-space-xs cursor-pointer"
+                  onClick={handleSwitchCamera}
+                  className="flex h-12 w-full cursor-pointer items-center justify-center gap-space-xs rounded-full bg-surface-container-highest/20 px-space-lg font-body-sm text-body-sm text-white transition-colors hover:bg-surface-container-highest/30 sm:w-auto"
                   id="btn-retake"
                   type="button"
                 >
@@ -607,19 +692,11 @@ export default function CaptureSolvePage() {
                   <span>Switch Camera</span>
                 </button>
               </div>
-            </div>
-
-            {/* AI + Offline CAS Statement Banner */}
-            <div className="rounded-xl bg-surface p-space-md shadow-card flex items-start gap-space-md border border-hairline">
-              <div className="w-9 h-9 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[20px]">verified_user</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <h2 className="font-headline-sm text-body-sm font-semibold text-ink">Multimodal AI + WASM High-Precision OCR</h2>
-                <p className="font-body-sm text-code-sm text-ink-muted">
-                  Powered by Google Gemini 2.5 Flash Vision for handwritten &amp; complex formulas with automatic fallback to client-side WASM.
+              {cameraNotice && (
+                <p role="status" aria-live="polite" className="px-2 pb-1 text-center font-code-sm text-[11px] text-amber sm:text-left">
+                  {cameraNotice}
                 </p>
-              </div>
+              )}
             </div>
           </section>
 
@@ -629,10 +706,11 @@ export default function CaptureSolvePage() {
             <div className="rounded-xl bg-surface p-space-md shadow-card flex flex-col gap-space-md border border-hairline">
               <div className="flex items-center justify-between flex-wrap gap-space-xs">
                 <div className="flex items-center gap-space-xs">
-                  <span className="px-space-sm py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-code-sm text-code-sm font-medium">
-                    OCR Confidence: {ocrConfidence}%
+                  <span className="rounded-full bg-secondary-fixed px-space-sm py-0.5 font-code-sm text-[10px] font-medium text-on-secondary-fixed sm:text-code-sm">
+                    <span className="sm:hidden">{ocrConfidence > 0 ? `OCR ${ocrConfidence}%` : 'OCR pending'}</span>
+                    <span className="hidden sm:inline">{ocrConfidence > 0 ? `OCR Confidence: ${ocrConfidence}%` : 'OCR pending'}</span>
                   </span>
-                  <span className="font-code-sm text-code-sm text-ink-muted font-medium">{activeEngineUsed}</span>
+                  <span className="max-w-[130px] truncate font-code-sm text-[10px] font-medium text-ink-muted sm:max-w-none sm:text-code-sm">{activeEngineUsed}</span>
                 </div>
                 <div className="flex items-center gap-1 text-secondary font-code-sm text-code-sm">
                   <span className="material-symbols-outlined text-[16px]">check_circle</span>
@@ -641,8 +719,8 @@ export default function CaptureSolvePage() {
               </div>
 
               {/* Editable Parsed Expression Bar */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-space-sm items-center p-space-sm rounded-lg bg-surface-container-low border border-hairline">
-                <div className="md:col-span-4 h-16 rounded overflow-hidden relative flex items-center justify-center bg-surface-container-high">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-space-sm items-center p-space-sm rounded-lg bg-surface-container-low border border-hairline">
+                <div className="sm:col-span-4 lg:col-span-3 h-16 rounded overflow-hidden relative flex items-center justify-center bg-surface-container-high">
                   <div
                     className="absolute inset-0 bg-cover bg-center"
                     style={{
@@ -654,9 +732,9 @@ export default function CaptureSolvePage() {
                   <div className="absolute inset-1 rounded bg-amber/15 shadow-[inset_0_0_0_1.5px_#DB9558]"></div>
                   <span className="relative z-10 font-code-sm text-[10px] bg-ink/80 text-amber px-1.5 py-0.2 rounded font-mono">ROI CROP</span>
                 </div>
-                <div className="md:col-span-8 flex flex-col justify-center px-space-xs">
+                <div className="sm:col-span-8 lg:col-span-9 flex flex-col justify-center px-space-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-caption text-caption text-ink-muted uppercase tracking-wider">Confirmed Expression</span>
+                    <span className="font-caption text-caption text-ink-muted uppercase tracking-wider">Recognized Expression</span>
                     <button
                       onClick={() => setIsEditingConfirm(!isEditingConfirm)}
                       className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5 cursor-pointer"
@@ -666,18 +744,20 @@ export default function CaptureSolvePage() {
                     </button>
                   </div>
                   {isEditingConfirm ? (
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2">
                       <input
                         type="text"
                         value={editBuffer}
                         onChange={(e) => setEditBuffer(e.target.value)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-hairline font-mono text-sm text-ink focus:outline-none focus:ring-1 focus:ring-amber"
+                        className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-surface border border-hairline font-mono text-sm text-ink focus:outline-none focus:ring-1 focus:ring-amber"
+                        placeholder="e.g. 3x - 30 = 0"
                       />
                       <button
                         onClick={handleConfirmEdit}
-                        className="px-3 py-1.5 rounded-lg bg-amber text-ink font-semibold text-xs shadow-xs hover:brightness-105 cursor-pointer"
+                        className="whitespace-nowrap shrink-0 px-3.5 py-1.5 rounded-lg bg-amber text-ink font-semibold text-xs shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1"
                       >
-                        Re-Solve
+                        <span className="material-symbols-outlined text-[14px]">bolt</span>
+                        <span>Confirm &amp; Solve</span>
                       </button>
                     </div>
                   ) : (
@@ -686,7 +766,7 @@ export default function CaptureSolvePage() {
                         {currentExpression}
                       </span>
                       <span className="px-space-sm py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-code-sm text-caption font-semibold">
-                        ✓ Validated
+                        Parsed
                       </span>
                     </div>
                   )}
@@ -726,59 +806,19 @@ export default function CaptureSolvePage() {
               <div className="p-space-sm rounded-lg bg-olive-tint-soft flex items-center justify-between gap-space-sm">
                 <div className="flex items-center gap-space-xs text-secondary font-body-sm text-code-sm">
                   <span className="material-symbols-outlined text-[18px]">verified</span>
-                  <span>Analytical check verified with zero residual norm</span>
+                  <span>{solution.isVerified ? "Verified by substitution and exact arithmetic" : "Run a supported expression to verify"}</span>
                 </div>
                 <span className="font-code-sm text-caption text-secondary shrink-0 font-medium">Deterministic CAS</span>
               </div>
             </div>
 
-            {/* Step-by-Step Rigorous Derivation Cards */}
-            <div className="flex flex-col gap-space-sm">
-              <div className="flex items-center justify-between px-space-xs">
-                <div>
-                  <h2 className="font-headline-sm text-headline-sm text-ink font-semibold">Step-by-Step Solution</h2>
-                  <p className="font-code-sm text-code-sm text-ink-muted">Rigorous algebraic breakdown</p>
-                </div>
-                <span className="font-code-sm text-code-sm text-ink-muted">{solution.problemType}</span>
-              </div>
 
-              {solution.steps.map((step) => (
-                <div
-                  key={step.stepNumber}
-                  className="rounded-xl bg-surface p-space-md shadow-card flex flex-col gap-space-xs hover:border-amber/50 transition-colors border border-hairline"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-space-sm">
-                      <span className="w-6 h-6 rounded-full bg-amber/20 text-ink font-code-sm text-code-sm font-semibold flex items-center justify-center">
-                        0{step.stepNumber}
-                      </span>
-                      <span className="font-headline-sm text-body-lg font-semibold text-ink">{step.title}</span>
-                    </div>
-                    <span className="font-code-sm text-caption text-ink-muted">{step.rule}</span>
-                  </div>
-                  <p className="font-body-sm text-body-sm text-ink-muted pl-8">{step.description}</p>
-                  <div className="ml-8 mt-1 p-space-sm rounded bg-surface-container-low font-code-input text-code-input text-ink font-mono flex items-center gap-space-md flex-wrap">
-                    <code>{step.mathExpression}</code>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Terminal Diagnostics Box */}
-            <div className="rounded-xl bg-ink text-white p-space-md flex flex-col gap-space-xs shadow-md">
-              <div className="flex items-center justify-between font-code-sm text-caption text-surface-dim">
-                <div className="flex items-center gap-space-xs">
-                  <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                  <span>MATHLENS_CAS_KERNEL::VERIFY</span>
-                </div>
-                <span className="font-mono">TIME: {solution.executionTimeMs}ms</span>
-              </div>
-              <div className="font-code-sm text-code-sm font-mono text-surface-container-highest/90 flex flex-col gap-0.5">
-                <div>&gt; f(x) := {solution.normalizedExpression}</div>
-                <div>&gt; eval(f, x=roots) =&gt; {solution.verificationDetails.residualNorm.toExponential(2)} [PASS]</div>
-                <div className="text-amber">&gt; Residual Norm ||r||_inf = 0.000000e+00 ({solution.verificationDetails.status})</div>
-              </div>
-            </div>
+            {/* Complete Written Solution in Text Form (One Go) */}
+            <CompleteSolutionNarrative
+              solution={solution}
+              originalProblem={currentExpression}
+              idPrefix="capture-narrative"
+            />
 
             {/* Utility Action Bar */}
             <div className="flex items-center justify-between flex-wrap gap-space-sm pt-space-xs">
@@ -806,13 +846,15 @@ export default function CaptureSolvePage() {
                   <span>{copiedCaptureType === 'steps' ? 'Copied Steps!' : 'Copy Steps'}</span>
                 </button>
                 <button
-                  onClick={() => setIsCaptureStarred(!isCaptureStarred)}
-                  className={`w-9 h-9 rounded-full bg-surface hover:bg-surface-container shadow-sm text-ink flex items-center justify-center transition-colors cursor-pointer border border-hairline ${
-                    isCaptureStarred ? 'text-amber' : ''
-                  }`}
+                  onClick={handleCaptureFavorite}
+                  disabled={!historyId}
+                  className={`w-9 h-9 rounded-full bg-surface hover:bg-surface-container shadow-sm text-ink flex items-center justify-center transition-colors border border-hairline ${
+                    historyId ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                  } ${isCaptureStarred ? 'text-amber' : ''}`}
                   id="star-btn"
-                  title="Bookmark Solution"
+                  title={historyId ? 'Favorite in Notebook' : 'Confirm a result to save it'}
                   type="button"
+                  aria-pressed={isCaptureStarred}
                 >
                   <span
                     className="material-symbols-outlined text-[18px]"
@@ -823,15 +865,26 @@ export default function CaptureSolvePage() {
                 </button>
               </div>
               <button
-                onClick={handleCaptureAndSolve}
-                className="px-space-lg py-2 rounded-full bg-amber text-ink font-body-sm text-body-sm font-semibold flex items-center gap-1.5 hover:bg-primary-fixed transition-colors shadow-sm cursor-pointer"
+                onClick={() => {
+                  setIsEditingConfirm(false);
+                  setCameraError(null);
+                  setHistoryNotice(null);
+                  setOcrConfidence(0);
+                  setCapturedSnapshot(null);
+                }}
+                className="px-space-lg p-2 rounded-full bg-amber text-ink font-body-sm text-body-sm font-semibold flex items-center gap-1.5 hover:bg-primary-fixed transition-colors shadow-sm cursor-pointer"
                 id="solve-another-btn"
                 type="button"
               >
-                <span>Solve Another</span>
+                <span>Capture Another</span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>
+            {historyNotice && (
+              <p role="status" className="font-code-sm text-[11px] text-ink-muted">
+                {historyNotice}
+              </p>
+            )}
           </section>
         </div>
       </div>

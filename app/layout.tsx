@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: '%s | MathLens',
   },
   description:
-    'Free, private photo, camera, and handwriting math solver. Solves quadratic equations, calculus, and linear systems client-side with verified step-by-step proofs and zero AI hallucinations.',
+    'Photo, camera, handwriting, and typed math solver. Gemini assists with OCR, then a deterministic client-side CAS solves and verifies each step. Saved history stays on your device.',
   keywords: [
     'math solver',
     'photo math solver',
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     'quadratic equation solver',
     'deterministic CAS',
     'client side math solver',
-    'free math solver without ai',
+    'verified math solver',
     'open source math compiler',
   ],
   authors: [{ name: 'MathLens Team' }],
@@ -60,14 +60,14 @@ export const metadata: Metadata = {
     url: APP_URL,
     title: 'MathLens • Deterministic Photo & Handwriting Math Solver',
     description:
-      'Write, snap, or upload math problems. Solved with 100% deterministic rigor and verified step-by-step proofs. Zero external AI APIs.',
+      'Write, snap, upload, or type math problems. Gemini OCR reads the input; a deterministic client-side CAS solves and verifies the result.',
     siteName: 'MathLens',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'MathLens • Web CAS | Deterministic Math Solver',
     description:
-      'Client-side photo, camera & handwriting math solver with verified step-by-step proofs.',
+      'Client-side photo, camera & handwriting math solver with verified step-by-step derivations.',
   },
   robots: {
     index: true,

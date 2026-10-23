@@ -208,7 +208,7 @@ export default function AuthPage() {
             <div className="hidden sm:flex items-center gap-3 text-xs text-[#1E231D]/60 font-medium">
               <span>Client-Side Sandbox</span>
               <span className="w-1 h-1 rounded-full bg-[#1E231D]/20" />
-              <span>Zero Remote AI Compute</span>
+              <span>AI OCR, local solver</span>
             </div>
           </div>
 
@@ -223,7 +223,7 @@ export default function AuthPage() {
                     FIG 1.0 • OPTICAL CAS PIPELINE
                   </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-[#FCF9EA] border border-[#1E231D]/10 font-mono text-[10px] sm:text-xs text-[#1E231D] font-semibold">
-                    100% Client-Side
+                    Local CAS + history
                   </span>
                 </div>
 
@@ -297,8 +297,8 @@ export default function AuthPage() {
                       <ShieldCheck className="w-4 h-4 text-[#97A87A]" />
                     </div>
                     <div className="min-w-0">
-                      <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Zero Exfiltration</span>
-                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">100% Private</span>
+                      <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Local History</span>
+                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">Stored on this device</span>
                     </div>
                   </div>
 
@@ -308,7 +308,7 @@ export default function AuthPage() {
                     </div>
                     <div className="min-w-0">
                       <span className="text-xs font-semibold leading-tight block text-[#1E231D]">Step-by-Step</span>
-                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">Inductive Proofs</span>
+                      <span className="text-[10px] text-[#1E231D]/60 block mt-0.5">Verified Steps</span>
                     </div>
                   </div>
                 </div>
@@ -318,7 +318,7 @@ export default function AuthPage() {
               <div className="bg-[#DFE4DA]/40 rounded-xl p-4 flex items-center gap-3 border border-[#1E231D]/5">
                 <BookOpen className="w-5 h-5 text-[#1E231D]/70 shrink-0" />
                 <p className="text-xs text-[#1E231D]/70 leading-relaxed">
-                  Designed for researchers, educators, and students. Adheres strictly to ISO 80000-2 mathematical conventions.
+                  Designed for researchers, educators, and students. Uses standard mathematical notation and exact rational arithmetic.
                 </p>
               </div>
             </div>
@@ -334,7 +334,7 @@ export default function AuthPage() {
                   <p className="text-xs sm:text-sm text-[#1E231D]/70 mt-1">
                     {mode === 'otp'
                       ? `We sent a 6-digit cryptographic code to ${email}.`
-                      : 'Authenticate to synchronize derivation notebooks or proceed offline.'}
+                      : 'Authenticate to keep your derivation notebook, or proceed locally as a guest.'}
                   </p>
                 </div>
 
@@ -411,7 +411,7 @@ export default function AuthPage() {
                           id="signin-email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="euler@oxford.ac.uk"
+                          placeholder="you@example.com"
                           required
                           type="email"
                           className="w-full h-12 pl-10 pr-4 rounded-xl bg-[#F1F5EB] text-[#1E231D] text-sm placeholder:text-[#1E231D]/40 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#DB9558] transition-all border border-transparent focus:border-[#DB9558]"
@@ -518,14 +518,14 @@ export default function AuthPage() {
                     href="/solve/capture"
                     className="w-full py-2.5 px-4 rounded-full bg-[#EBEFE6] hover:bg-[#E5EAE0] transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 text-[#1E231D] text-center"
                   >
-                    <span className="text-xs font-semibold">Continue as Guest (Local Offline Mode)</span>
+                    <span className="text-xs font-semibold">Continue as Guest (Local Sandbox Mode)</span>
                     <span className="text-[#1E231D]/60 text-[11px]">— Zero sync, solves client-side</span>
                   </Link>
 
                   <div className="flex items-center justify-center gap-1.5 pt-1 text-center">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#97A87A]" />
                     <span className="text-[11px] text-[#1E231D]/60">
-                      End-to-end encrypted • Zero telemetry on exam or research data
+                      No account needed | History stored on this device
                     </span>
                   </div>
                 </div>
@@ -538,7 +538,7 @@ export default function AuthPage() {
       {/* Footer */}
       <footer className="w-full py-4 bg-[#FCF9EA] border-t border-[#1E231D]/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-[#1E231D]/50 text-xs font-medium">
-          Academic Identity Provider • Zero Remote Telemetry Guaranteed
+          MathLens | Local history | AI-assisted OCR
         </div>
       </footer>
     </div>

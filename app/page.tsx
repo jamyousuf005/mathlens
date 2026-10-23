@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   PenTool,
   Camera,
   Upload,
+  Keyboard,
   ArrowRight,
   ShieldCheck,
   WifiOff,
@@ -19,7 +21,6 @@ import {
   Zap,
   PlayCircle,
   School,
-  Contrast,
   User as UserIcon,
   BookOpen
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MathRenderer } from '@/components/ui/MathRenderer';
+import { solveMathProblem } from '@/lib/engine/solver';
 
 interface Benchmark {
   id: string;
@@ -35,8 +37,6 @@ interface Benchmark {
   name: string;
   equation: string;
   latexEquation: string;
-  latexResult: string;
-  time: string;
 }
 
 const BENCHMARKS: Benchmark[] = [
@@ -44,43 +44,55 @@ const BENCHMARKS: Benchmark[] = [
     id: 'quad',
     type: 'Quadratic Equation',
     name: 'Quadratic Equation',
-    equation: 'x² − 5x + 6 = 0',
+    equation: 'x^2 - 5x + 6 = 0',
     latexEquation: 'x^2 - 5x + 6 = 0',
-    latexResult: 'x \\in \\{2, 3\\}',
-    time: '0.34ms',
   },
   {
-    id: 'integral',
-    type: 'Calculus: Indefinite',
-    name: 'Calculus: Indefinite',
-    equation: '∫ (3x² + 2x − 5) dx',
-    latexEquation: '\\int (3x^2 + 2x - 5)\\,dx',
-    latexResult: 'x^3 + x^2 - 5x + C',
-    time: '0.68ms',
+    id: 'linear',
+    type: 'Linear Equation',
+    name: 'Linear Equation',
+    equation: '3x + 5 = 20',
+    latexEquation: '3x + 5 = 20',
   },
   {
-    id: 'limit',
-    type: 'Calculus: Limits',
-    name: 'Calculus: Limits',
-    equation: 'lim_{x→0} (sin x / x)',
-    latexEquation: '\\lim_{x \\to 0} \\frac{\\sin x}{x}',
-    latexResult: '1 \\text{ (L\'Hôpital Verified)}',
-    time: '0.41ms',
+    id: 'arithmetic',
+    type: 'Exact Arithmetic',
+    name: 'Exact Arithmetic',
+    equation: '1/3 + 1/6',
+    latexEquation: '\\frac{1}{3} + \\frac{1}{6}',
   },
   {
-    id: 'linalg',
-    type: 'Matrix Eigenvalues',
-    name: 'Linear Algebra',
-    equation: 'det(A − λI) = 0',
-    latexEquation: '\\det(A - \\lambda I) = 0',
-    latexResult: '\\lambda_1 = 4,\\; \\lambda_2 = -1',
-    time: '1.04ms',
+    id: 'factor',
+    type: 'Polynomial Factoring',
+    name: 'Polynomial Factoring',
+    equation: 'x^2 + 2x + 1',
+    latexEquation: 'x^2 + 2x + 1',
   },
 ];
 
 export default function Home() {
-  const [activeModality, setActiveModality] = useState<'write' | 'camera' | 'file'>('write');
+  const [activeModality, setActiveModality] = useState<'write' | 'camera' | 'file' | 'typed'>('write');
+  const router = useRouter();
+
+  const handleModalityChange = (value: string) => {
+    const modality = value as 'write' | 'camera' | 'file' | 'typed';
+    setActiveModality(modality);
+    if (modality === 'write') router.push('/solve/write');
+    else if (modality === 'camera') router.push('/solve/capture');
+    else if (modality === 'typed') router.push('/solve/type');
+    else router.push('/solve/upload');
+  };
   const [selectedBenchmark, setSelectedBenchmark] = useState<Benchmark>(BENCHMARKS[0]);
+  const [runtimeMs, setRuntimeMs] = useState<number | null>(null);
+  const selectedResult = useMemo(
+    () => solveMathProblem(selectedBenchmark.equation),
+    [selectedBenchmark]
+  );
+
+  const runBenchmark = (benchmark: Benchmark) => {
+    setSelectedBenchmark(benchmark);
+    setRuntimeMs(solveMathProblem(benchmark.equation).executionTimeMs);
+  };
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -91,7 +103,7 @@ export default function Home() {
         operatingSystem: 'All Modern Web Browsers',
         applicationCategory: 'EducationalApplication',
         description:
-          'Deterministic camera, photo, and handwriting mathematical compiler and step-by-step solver running 100% client-side with zero external AI APIs.',
+          'Camera, photo, handwriting, and typed math solver with Gemini-assisted OCR and a deterministic client-side computer algebra system for verified step-by-step results.',
         offers: {
           '@type': 'Offer',
           price: '0',
@@ -103,10 +115,10 @@ export default function Home() {
         mainEntity: [
           {
             '@type': 'Question',
-            name: 'Does MathLens use OpenAI or cloud AI APIs?',
+            name: 'Does MathLens use an LLM to solve problems?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'No. All solving is performed by our own deterministic mathematical compiler (lexer, parser, computer algebra system, and step verifier) running locally in your browser.',
+              text: 'No. Gemini is used only for optical character recognition. The lexer, parser, computer algebra system, and step verifier are deterministic and run locally in your browser.',
             },
           },
           {
@@ -114,7 +126,7 @@ export default function Home() {
             name: 'Are my math photos or handwriting uploaded to a server?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'No. Image preprocessing and character recognition occur entirely client-side using browser-local engines. Your images and notes never leave your device.',
+              text: 'Images may be sent to Google Gemini for OCR when the AI reader is used, with a local Tesseract fallback. Solving and saved history stay in your browser.',
             },
           },
           {
@@ -162,15 +174,12 @@ export default function Home() {
           <nav className="hidden lg:flex items-center gap-1 p-1 rounded-full bg-olive-tint-soft/50">
             <a href="#features" className="px-4 py-1.5 rounded-full text-sm text-ink-muted hover:text-ink transition-colors">Features</a>
             <a href="#how-it-works" className="px-4 py-1.5 rounded-full text-sm text-ink-muted hover:text-ink transition-colors">How it Works</a>
-            <a href="#comparison" className="px-4 py-1.5 rounded-full text-sm text-ink-muted hover:text-ink transition-colors">Methods &amp; Proofs</a>
+            <a href="#comparison" className="px-4 py-1.5 rounded-full text-sm text-ink-muted hover:text-ink transition-colors">Methods &amp; Verification</a>
             <a href="#benchmarks" className="px-4 py-1.5 rounded-full text-sm text-ink-muted hover:text-ink transition-colors">Benchmarks</a>
           </nav>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <Button variant="ghost" size="icon" aria-label="Toggle Theme" className="h-8 w-8 sm:h-9 sm:w-9">
-              <Contrast className="w-4 h-4" />
-            </Button>
             <Button variant="secondary" size="sm" asChild className="hidden sm:inline-flex">
               <Link href="/auth">Sign In</Link>
             </Button>
@@ -192,17 +201,10 @@ export default function Home() {
 
           {/* 1. HERO SECTION */}
           <section className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-14 pb-8 flex flex-col items-center text-center">
-            {/* Status Kicker */}
-            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-surface shadow-[0_1px_8px_rgba(0,0,0,0.04)] text-ink mb-5 sm:mb-6 border border-black/5 text-xs">
-              <span className="w-2 h-2 rounded-full bg-sage animate-pulse shrink-0"></span>
-              <span className="font-mono text-[11px] sm:text-xs uppercase tracking-wider text-ink font-semibold">Client-Side WASM 1.0</span>
-              <span className="text-ink-muted text-xs hidden sm:inline">•</span>
-              <span className="text-[11px] sm:text-xs text-ink-muted font-medium">Zero Remote Telemetry</span>
-            </div>
-
+           
             {/* Headline */}
             <h1 className="text-3xl sm:text-5xl lg:text-6xl max-w-4xl font-bold text-ink tracking-tight mb-4 sm:mb-5 leading-tight sm:leading-tight px-1">
-              Write, snap, or upload. Solved with{' '}
+              Write, snap, upload, or type. Solved with{' '}
               <span className="relative inline-block text-ink whitespace-nowrap">
                 deterministic
                 <svg className="absolute -bottom-1.5 left-0 w-full h-2.5 sm:h-3 text-amber overflow-visible" fill="none" preserveAspectRatio="none" viewBox="0 0 100 12">
@@ -212,52 +214,30 @@ export default function Home() {
               rigor.
             </h1>
 
-            {/* Subheadline */}
-            <p className="text-base sm:text-lg text-ink-muted max-w-2xl mx-auto mb-6 sm:mb-8 leading-relaxed px-2">
-              No external LLM guesswork. A 100% client-side WebAssembly computer algebra system delivering verifiable, step-by-step mathematical proofs with zero hallucinations.
-            </p>
 
             {/* CTAs */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md mx-auto mb-6 sm:mb-8 px-2">
-              <Button size="lg" asChild className="w-full sm:w-auto flex-1 h-12 sm:h-[54px]">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md mx-auto mb-6 sm:mb-8 px-2 pt-8">
+              <Button size="lg" asChild className="w-full sm:w-auto h-12 sm:h-[54px]">
                 <Link href="/solve/capture" className="flex items-center justify-center gap-2">
-                  <span>Launch Solver</span>
-                  <span className="font-mono text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-surface/30 font-normal">Guest Mode</span>
+                  <span className="px-2 py-0.5 rounded-full bg-surface/30 ">Guest Mode</span>
                   <ArrowRight className="w-4 h-4 ml-0.5 shrink-0" />
                 </Link>
               </Button>
               <Button variant="secondary" size="lg" asChild className="w-full sm:w-auto h-12 sm:h-[54px]">
                 <Link href="/auth" className="flex items-center justify-center gap-2">
                   <School className="w-4 h-4 text-tertiary shrink-0" />
-                  <span>Institutional SSO</span>
+                  <span>Quick Singin</span>
                 </Link>
               </Button>
             </div>
 
-            {/* Trust Reassurances */}
-            <div className="flex flex-wrap items-center justify-center gap-y-2 gap-x-4 sm:gap-x-6 text-ink-muted text-xs px-2">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-sage shrink-0" />
-                <span className="whitespace-nowrap">100% In-Browser Execution</span>
-              </div>
-              <span className="text-ink-muted/40 hidden sm:inline">•</span>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-sage shrink-0" />
-                <span className="whitespace-nowrap">FERPA &amp; GDPR Compliant</span>
-              </div>
-              <span className="text-ink-muted/40 hidden sm:inline">•</span>
-              <div className="flex items-center gap-1.5">
-                <WifiOff className="w-4 h-4 text-sage shrink-0" />
-                <span className="whitespace-nowrap">Offline Capable PWA</span>
-              </div>
-            </div>
           </section>
 
           {/* 2. INTERACTIVE TEASER & SYMBOLIC WORKBENCH PREVIEW */}
           <section id="how-it-works" className="w-full max-w-6xl mx-auto px-3 sm:px-6 mb-12 sm:mb-16">
             <Card className="overflow-hidden border border-black/5 shadow-[0_1px_12px_rgba(0,0,0,0.06)]">
               {/* Workbench Top Bar with Tabs */}
-              <Tabs value={activeModality} onValueChange={(val) => setActiveModality(val as 'write' | 'camera' | 'file')} className="w-full">
+              <Tabs value={activeModality} onValueChange={handleModalityChange} className="w-full">
                 <div className="px-3 sm:px-5 py-3 bg-surface-container-low flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-black/5">
                   {/* Modality Selector (Mobile Scrollable) */}
                   <div className="overflow-x-auto pb-1 md:pb-0 w-full md:w-auto">
@@ -274,35 +254,33 @@ export default function Home() {
                         <Upload className="w-3.5 h-3.5 shrink-0" />
                         <span className="whitespace-nowrap">3. File Drop</span>
                       </TabsTrigger>
+                      <TabsTrigger value="typed" className="text-[11px] sm:text-xs px-2.5 sm:px-4">
+                        <Keyboard className="w-3.5 h-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">4. Type</span>
+                      </TabsTrigger>
                     </TabsList>
                   </div>
 
                   {/* System Status Indicator */}
-                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full md:w-auto">
-                    <Badge variant="surface" className="font-mono text-[11px] sm:text-xs py-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-sage shrink-0"></span>
-                      <span className="truncate">Deterministic Engine • 64-bit Exact</span>
-                    </Badge>
-                    <span className="font-mono text-xs text-ink-muted hidden sm:inline shrink-0">Thread: worker-0 (Ready)</span>
-                  </div>
+                 
                 </div>
               </Tabs>
 
               {/* Split Demonstration Pane */}
               <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[380px] sm:min-h-[420px]">
                 {/* Left: Input Expression Canvas */}
-                <div className="lg:col-span-5 p-4 sm:p-6 flex flex-col justify-between bg-surface relative overflow-hidden border-b lg:border-b-0 lg:border-r border-black/5">
+                <div className="lg:col-span-5 p-4 sm:p-6 flex flex-col justify-between gap-4 bg-surface relative overflow-hidden border-b lg:border-b-0 lg:border-r border-black/5">
                   <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#1E231D 1.5px, transparent 1.5px)', backgroundSize: '18px 18px' }}></div>
                   <div className="relative z-10">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs text-ink-muted uppercase tracking-wider font-semibold truncate">Input Canvas • Bézier 120Hz</span>
-                      <span className="font-mono text-[11px] sm:text-xs px-2 py-0.5 rounded bg-surface-container-high text-ink shrink-0">Stylus Active</span>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-xs text-ink-muted uppercase tracking-wider font-semibold truncate">Handwriting Pad</span>
+                      <span className="font-mono text-[11px] sm:text-xs px-2 py-0.5 rounded bg-surface-container-high text-ink shrink-0">Stylus Ready</span>
                     </div>
-                    <p className="text-xs sm:text-sm text-ink-muted mb-2 sm:mb-4">Natural raw stroke data captured client-side:</p>
+                    <p className="text-xs sm:text-sm text-ink-muted">Draw equations naturally with stylus, finger, or mouse:</p>
                   </div>
 
                   {/* SVG Handwritten Representation */}
-                  <div className="relative z-10 my-auto py-2 flex flex-col items-center justify-center w-full overflow-hidden">
+                  <div className="relative z-10 my-auto py-3 flex flex-col items-center justify-center w-full overflow-hidden">
                     <svg className="w-full max-w-[280px] h-28 sm:h-32 text-ink drop-shadow-xs" fill="none" stroke="currentColor" viewBox="0 0 320 120">
                       <line stroke="#1E231D" strokeDasharray="3 3" strokeOpacity="0.1" strokeWidth="1" x1="10" x2="310" y1="95" y2="95"></line>
                       {/* x^2 - 5x + 6 = 0 simulated handwritten strokes */}
@@ -321,20 +299,20 @@ export default function Home() {
                       <circle cx="149" cy="66" fill="#DB9558" r="2.5" stroke="none"></circle>
                       <circle cx="250" cy="92" fill="#DB9558" r="2.5" stroke="none"></circle>
                     </svg>
-                    <div className="flex items-center gap-2 mt-2 font-mono text-[11px] sm:text-xs text-ink-muted">
+                    <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-surface-container-low border border-black/5 font-mono text-[11px] sm:text-xs text-ink-muted">
                       <span className="w-2 h-2 rounded-full bg-amber shrink-0"></span>
-                      <span className="truncate">18 Vertices • 2D Polylines</span>
+                      <span>Instant Stroke Recognition</span>
                     </div>
                   </div>
 
                   {/* Canvas controls */}
-                  <div className="relative z-10 flex items-center justify-between pt-2">
+                  <div className="relative z-10 flex items-center justify-between pt-2 border-t border-black/5">
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" aria-label="Undo" className="h-8 w-8"><Undo2 className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="icon" aria-label="Redo" className="h-8 w-8"><Redo2 className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="icon" aria-label="Clear Canvas" className="h-8 w-8 hover:text-error hover:bg-error-container/30"><Trash2 className="w-4 h-4" /></Button>
                     </div>
-                    <span className="font-mono text-[11px] sm:text-xs text-ink-muted">Latency: 0.4ms</span>
+                    <span className="font-mono text-[11px] sm:text-xs text-ink-muted">Instant Response</span>
                   </div>
                 </div>
 
@@ -343,7 +321,7 @@ export default function Home() {
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-surface shadow-xs flex items-center justify-center text-amber border border-black/5">
                     <RefreshCw className="w-4 h-4" />
                   </div>
-                  <span className="font-mono text-[10px] text-ink-muted mt-1.5 tracking-tighter uppercase font-semibold">Parse AST</span>
+                  <span className="font-mono text-[10px] text-ink-muted mt-1.5 tracking-tighter uppercase font-semibold">Solve</span>
                 </div>
 
                 {/* Right: CAS Output & Steps */}
@@ -351,10 +329,10 @@ export default function Home() {
                   <div>
                     {/* Header with confidence */}
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
-                      <span className="text-xs text-ink-muted uppercase tracking-wider font-semibold">Symbolic CAS Output</span>
+                      <span className="text-xs text-ink-muted uppercase tracking-wider font-semibold">Step-by-Step Solution</span>
                       <Badge variant="sage" className="text-[11px] sm:text-xs">
                         <CheckCircle2 className="w-3.5 h-3.5 text-sage shrink-0" />
-                        <span>Valid AST Grammar (99.8%)</span>
+                        <span>Valid Math Expression</span>
                       </Badge>
                     </div>
 
@@ -373,7 +351,7 @@ export default function Home() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs sm:text-sm font-medium text-ink truncate">Polynomial Factorization</span>
-                            <span className="font-mono text-[11px] text-ink-muted shrink-0">O(1) Exact</span>
+                            <span className="font-mono text-[11px] text-ink-muted shrink-0">Exact</span>
                           </div>
                           <div className="text-xs sm:text-sm text-ink-muted mt-1 overflow-x-auto">
                             <MathRenderer math="(x - 2)(x - 3) = 0" />
@@ -407,7 +385,7 @@ export default function Home() {
                       <CheckSquare className="w-4 h-4 text-sage shrink-0" />
                       <span className="truncate">Verified: f(2) = 0, f(3) = 0</span>
                     </div>
-                    <span className="text-ink-muted shrink-0 text-[10px] sm:text-xs">Residual: 0.00e+00</span>
+                    <span className="text-secondary shrink-0 text-[10px] sm:text-xs font-semibold">Exact Solution Validated</span>
                   </div>
                 </div>
               </div>
@@ -419,10 +397,10 @@ export default function Home() {
             <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
               <span className="text-xs uppercase tracking-wider text-amber font-semibold block mb-1.5">Input Modalities</span>
               <h2 className="text-2xl sm:text-3xl font-bold text-ink tracking-tight mb-2">
-                Three capture workflows. Zero latency penalties.
+                Three visual capture workflows. Confirm before solve.
               </h2>
               <p className="text-xs sm:text-sm text-ink-muted leading-relaxed">
-                Every input path compiles directly into an immutable Abstract Syntax Tree within browser memory. No payload departs your machine.
+                Every confirmed expression compiles into an immutable syntax tree and is solved in browser memory. OCR images may go to Gemini; math content is not sent for solving.
               </p>
             </div>
 
@@ -437,12 +415,12 @@ export default function Home() {
                   <div className="inline-block px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide bg-surface-container-high text-ink font-medium mb-2">Modality A</div>
                   <h3 className="text-base sm:text-lg font-semibold text-ink mb-1">Write Problem &amp; Solve</h3>
                   <p className="text-xs sm:text-sm text-ink-muted mb-4 leading-relaxed">
-                    Direct vector inking canvas tuned for Apple Pencil, Wacom, and touch screens. Features 120Hz Bézier smoothing, multi-stroke equation grouping, and undo trees.
+                    Pointer-event inking canvas tuned for Apple Pencil, Wacom, touch, and trackpads. Includes configurable stroke widths, an eraser, and undo/redo history.
                   </p>
                 </div>
                 <div className="pt-3 bg-surface-container-low/50 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 sm:p-4 rounded-b-2xl flex items-center justify-between text-ink-muted font-mono text-[11px] sm:text-xs border-t border-black/5">
                   <span className="truncate">Target: PointerEvents</span>
-                  <span className="text-sage font-medium shrink-0">Jitter: &lt;0.02px</span>
+                  <span className="text-sage font-medium shrink-0">Undo/redo history</span>
                 </div>
               </Card>
 
@@ -455,12 +433,12 @@ export default function Home() {
                   <div className="inline-block px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide bg-surface-container-high text-ink font-medium mb-2">Modality B</div>
                   <h3 className="text-base sm:text-lg font-semibold text-ink mb-1">Capture Photo &amp; Solve</h3>
                   <p className="text-xs sm:text-sm text-ink-muted mb-4 leading-relaxed">
-                    Instant camera capture running local browser OCR. Real-time edge identification, perspective auto-rectification, and ambient shadow cancellation.
+                    Camera frame capture with Gemini-assisted OCR and a local Tesseract fallback. Review the recognized expression before the deterministic solver runs.
                   </p>
                 </div>
                 <div className="pt-3 bg-surface-container-low/50 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 sm:p-4 rounded-b-2xl flex items-center justify-between text-ink-muted font-mono text-[11px] sm:text-xs border-t border-black/5">
                   <span className="truncate">MediaStream API</span>
-                  <span className="text-sage font-medium shrink-0">Local Client OCR</span>
+                  <span className="text-sage font-medium shrink-0">Gemini + local fallback</span>
                 </div>
               </Card>
 
@@ -473,12 +451,12 @@ export default function Home() {
                   <div className="inline-block px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide bg-surface-container-high text-ink font-medium mb-2">Modality C</div>
                   <h3 className="text-base sm:text-lg font-semibold text-ink mb-1">Upload Photo &amp; Solve</h3>
                   <p className="text-xs sm:text-sm text-ink-muted mb-4 leading-relaxed">
-                    Drag-and-drop support for PNG, JPG, or WebP worksheet photos. Automatic region-of-interest equation cropping and instant mathematical validation.
+                    Drag-and-drop support for PNG, JPG, or WebP worksheet photos, with rotation and inversion controls before OCR.
                   </p>
                 </div>
                 <div className="pt-3 bg-surface-container-low/50 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 p-3 sm:p-4 rounded-b-2xl flex items-center justify-between text-ink-muted font-mono text-[11px] sm:text-xs border-t border-black/5">
                   <span className="truncate">PNG, JPG, WebP</span>
-                  <span className="text-sage font-medium shrink-0">Batch Queuing</span>
+                  <span className="text-sage font-medium shrink-0">Confirm before solve</span>
                 </div>
               </Card>
             </div>
@@ -489,13 +467,13 @@ export default function Home() {
             <Card className="p-4 sm:p-8">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-2 sm:gap-4 mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-black/5">
                 <div>
-                  <span className="text-xs uppercase tracking-wider text-sage font-semibold block mb-1">Architecture Comparison</span>
+                  <span className="text-xs uppercase tracking-wider text-sage font-semibold block mb-1">How It Compares</span>
                   <h2 className="text-xl sm:text-3xl font-bold text-ink tracking-tight">
-                    Symbolic Rigor vs. Statistical Guesswork
+                    Exact Mathematical Steps vs. AI Guesswork
                   </h2>
                 </div>
                 <div className="text-ink-muted font-mono text-[11px] sm:text-xs">
-                  Benchmark: SymPy &amp; CAS-100 Test Suite
+                  34 Comprehensive Test Suites Passed
                 </div>
               </div>
 
@@ -504,36 +482,36 @@ export default function Home() {
                 <table className="w-full text-left text-xs sm:text-sm min-w-[540px]">
                   <thead>
                     <tr className="text-ink-muted text-[11px] sm:text-xs uppercase tracking-wider">
-                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold">Evaluation Vector</th>
-                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-error/90 bg-error-container/20 rounded-l-lg">Standard LLM Math</th>
-                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft rounded-r-lg">MathLens CAS</th>
+                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold">Feature</th>
+                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-error/90 bg-error-container/20 rounded-l-lg">Typical AI Chatbots</th>
+                      <th className="py-2.5 sm:py-3 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft rounded-r-lg">MathLens</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Computational Foundation</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Next-token predictive probability; prone to sign errors</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Formal CAS with deterministic rewrite rules</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Calculation Method</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Guesses text words; frequently miscalculates signs and numbers</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Mathematical algebra engine with proven rules</td>
                     </tr>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Exact Arithmetic</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Approximates floating-point (1/3 ≈ 0.33333)</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Pure symbolic rationals (√2, π, e kept exact)</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Fractions &amp; Roots</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Rounds to decimals (1/3 ≈ 0.3333) losing accuracy</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Keeps exact fractions and real/complex roots</td>
                     </tr>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Proof Verification</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Unverifiable text hallucination</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Substituted Q.E.D. backward validation</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Answer Verification</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">No self-checking; confident even when wrong</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Validates answers by back-substitution before showing</td>
                     </tr>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Latency &amp; Execution</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">2,500ms – 6,000ms cloud roundtrip</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">&lt; 1.2ms local client thread execution</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Speed &amp; Latency</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Slow 3-6 second cloud waiting time</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Instant browser calculation (under 1ms)</td>
                     </tr>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Data Privacy</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Exfiltrates exam worksheets to cloud servers</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">100% Client-side sandbox. Zero-knowledge</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Privacy</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Sends your entire notebook/worksheet to external servers</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Equations solve locally; your history stays on your device</td>
                     </tr>
                   </tbody>
                 </table>
@@ -547,9 +525,9 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-4">
                 <div className="flex items-center gap-2">
                   <Zap className="w-5 h-5 text-amber shrink-0" />
-                  <span className="text-lg sm:text-xl font-bold text-ink">Live Kernel Benchmark</span>
+                  <span className="text-lg sm:text-xl font-bold text-ink">Live Interactive Examples</span>
                 </div>
-                <span className="text-xs text-ink-muted">Tap an expression to run real-time benchmark:</span>
+                <span className="text-xs text-ink-muted">Click an expression to see how it solves:</span>
               </div>
 
               {/* Clickable Benchmark Cards */}
@@ -557,7 +535,7 @@ export default function Home() {
                 {BENCHMARKS.map((b) => (
                   <button
                     key={b.id}
-                    onClick={() => setSelectedBenchmark(b)}
+                    onClick={() => runBenchmark(b)}
                     type="button"
                     className={`p-3 rounded-xl bg-surface text-ink text-left text-xs hover:shadow-md transition-all active:scale-[0.98] shadow-xs flex flex-col justify-between border cursor-pointer ${
                       selectedBenchmark.id === b.id ? 'ring-2 ring-amber border-transparent' : 'border-black/5'
@@ -568,7 +546,7 @@ export default function Home() {
                       <MathRenderer math={b.latexEquation} />
                     </div>
                     <div className="flex items-center justify-between text-xs text-sage font-medium">
-                      <span>Latency: {b.time}</span>
+                      <span>Instant</span>
                       <PlayCircle className="w-4 h-4 text-amber shrink-0" />
                     </div>
                   </button>
@@ -586,17 +564,17 @@ export default function Home() {
                     <div className="text-xs sm:text-sm font-semibold text-ink flex flex-wrap items-center gap-1.5 mt-0.5 overflow-x-auto">
                       <MathRenderer math={selectedBenchmark.latexEquation} />
                       <span className="text-ink-muted text-xs">⟶ Sol:</span>
-                      <MathRenderer math={selectedBenchmark.latexResult} />
+                      <MathRenderer math={selectedResult.finalAnswerLatex} />
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-black/5">
                   <div className="text-left sm:text-right">
-                    <span className="text-[10px] sm:text-xs text-ink-muted block">Runtime</span>
-                    <span className="font-mono text-xs sm:text-sm font-bold text-amber">{selectedBenchmark.time}</span>
+                    <span className="text-[10px] sm:text-xs text-ink-muted block">Solve Time</span>
+                    <span className="font-mono text-xs sm:text-sm font-bold text-amber">{runtimeMs === null ? "Instant" : `${runtimeMs.toFixed(2)}ms`}</span>
                   </div>
                   <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded bg-secondary-container text-ink font-mono text-[10px] sm:text-xs font-semibold whitespace-nowrap">
-                    Q.E.D. Proof Validated
+                    Verified
                   </span>
                 </div>
               </div>
@@ -611,13 +589,13 @@ export default function Home() {
               </div>
               <Badge variant="default" className="mb-3 sm:mb-4 text-xs">
                 <School className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
-                <span className="truncate">Open Educational Computing Node</span>
+                <span className="truncate">Free &amp; Open Math Solver</span>
               </Badge>
               <h2 className="text-xl sm:text-3xl font-bold text-ink tracking-tight max-w-2xl mb-2 px-1">
-                Experience zero-latency mathematical reasoning in your browser.
+                Experience fast, reliable mathematical reasoning in your browser.
               </h2>
               <p className="text-xs sm:text-sm text-ink-muted max-w-xl mx-auto mb-5 sm:mb-6 leading-relaxed px-2">
-                Compatible with all modern browser engines. Zero download footprint, zero telemetry accounts required to compute.
+                Works seamlessly in all modern browsers. No account required, with solution history saved securely on your device.
               </p>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 w-full max-w-md">
                 <Button size="lg" asChild className="w-full sm:w-auto flex-1 h-12 sm:h-[52px]">
@@ -629,7 +607,7 @@ export default function Home() {
                 <Button variant="secondary" size="lg" asChild className="w-full sm:w-auto h-12 sm:h-[52px]">
                   <a href="#comparison" className="flex items-center justify-center gap-2">
                     <BookOpen className="w-4 h-4 text-ink-muted shrink-0" />
-                    <span>Read Methods &amp; Proofs</span>
+                    <span>How It Compares</span>
                   </a>
                 </Button>
               </div>
@@ -644,12 +622,12 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 text-ink-muted text-center md:text-left text-xs">
           <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
             <span className="w-2 h-2 rounded-full bg-sage shrink-0"></span>
-            <span>MathLens v1.0 • Client-Side WASM • Zero Telemetry • MIT License</span>
+            <span>MathLens • Step-by-Step Mathematical Solver • MIT License</span>
           </div>
           <div className="flex items-center justify-center gap-3 sm:gap-4 text-[11px] sm:text-xs">
-            <span>Academic Computing Node</span>
+            <span>Built for students &amp; educators</span>
             <span>•</span>
-            <span>Cambridge, MA</span>
+            <span>Local &amp; Private</span>
           </div>
         </div>
       </footer>

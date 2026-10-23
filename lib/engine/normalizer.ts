@@ -17,9 +17,9 @@ export function normalizeMathExpression(raw: string): string {
   s = s.replace(/\?\s*=/g, '');
   s = s.replace(/\?/g, '');
 
-  // 3. Remove stray leading or trailing slash/dash noise from OCR edge artifacts
-  s = s.replace(/^[/*+=^~:_|]+/g, '');
-  s = s.replace(/[/*+=^~:_|]+$/g, '');
+  // 3. Remove stray leading or trailing OCR punctuation.
+  s = s.replace(/^[_~:]+/g, '');
+  s = s.replace(/[_~:]+$/g, '');
 
   // 3. OCR Operator Misrecognitions
   // Only replace 't' with '+' when strictly between two digits (e.g. 3 t 15 -> 3 + 15)
@@ -75,8 +75,8 @@ export function normalizeMathExpression(raw: string): string {
   };
   s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (match) => superscriptMap[match] || match);
 
-  // 6. If OCR produced "x2" instead of "x^2", normalize to "x^2"
-  s = s.replace(/([a-zA-Z])2([+-/*=]|$)/g, '$1^2$2');
+  // 6. If OCR produced "x2" instead of "x^2", normalize to "x^2".
+  s = s.replace(/(^|[^a-zA-Z])([a-zA-Z])2(?=[+\-*/=)]|$)/g, '$1$2^2');
 
   // 7. Lowercase algebraic variables (X -> x, Y -> y, Z -> z)
   s = s.replace(/([0-9+\-*/=()^]|^)([XYZ])([0-9+\-*/=()^]|$)/g, (_, p1, p2, p3) => `${p1}${p2.toLowerCase()}${p3}`);

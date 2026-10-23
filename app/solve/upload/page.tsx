@@ -3,7 +3,51 @@
 import React, { useState, useRef } from "react";
 import { solveMathProblem } from "@/lib/engine/solver";
 import { SolutionResult } from "@/lib/engine/types";
+import { ExpressionEditor } from "@/components/solve/expression-editor";
+import { CompleteSolutionNarrative } from "@/components/solve/complete-solution-narrative";
+import { MathRenderer } from "@/components/ui/MathRenderer";
+import { saveHistory, setHistoryFavorite } from "@/lib/history";
 
+const ALLOWED_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+async function prepareUploadImage(dataUrl: string, rotation: number, invert: boolean): Promise<string> {
+  const image = new Image();
+  image.src = dataUrl;
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Could not read image."));
+  });
+
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const radians = (rotation * Math.PI) / 180;
+  const rotatedWidth = Math.round(Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians)));
+  const rotatedHeight = Math.round(Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians)));
+  const canvas = document.createElement("canvas");
+  canvas.width = rotatedWidth;
+  canvas.height = rotatedHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not prepare the image.");
+
+  ctx.translate(rotatedWidth / 2, rotatedHeight / 2);
+  ctx.rotate(radians);
+  ctx.drawImage(image, -width / 2, -height / 2, width, height);
+
+  if (invert) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let index = 0; index < imageData.data.length; index += 4) {
+      imageData.data[index] = 255 - imageData.data[index];
+      imageData.data[index + 1] = 255 - imageData.data[index + 1];
+      imageData.data[index + 2] = 255 - imageData.data[index + 2];
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
 
 export default function UploadSolvePage() {
   const [uploadRotation, setUploadRotation] = useState(0);
@@ -13,11 +57,18 @@ export default function UploadSolvePage() {
   const [isUploadStarred, setIsUploadStarred] = useState(false);
   const [copiedUploadType, setCopiedUploadType] = useState<"latex" | "plain" | null>(null);
   const [customImage, setCustomImage] = useState<string | null>(null);
-  const [fileName, setFileName] = useState("calc_worksheet_problem_04.png");
-  const [fileSize, setFileSize] = useState("1.4 MB");
+  const [fileName, setFileName] = useState("No image selected");
+  const [fileSize, setFileSize] = useState("—");
+  const [imageDimensions, setImageDimensions] = useState("—");
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isEditingExpression, setIsEditingExpression] = useState(false);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [expression, setExpression] = useState<string>("x^2 - 5x + 6 = 0");
+  const [recognizedText, setRecognizedText] = useState<string>("x^2 - 5x + 6 = 0");
   const [latexExpr, setLatexExpr] = useState<string>("x^2 - 5x + 6 = 0");
   const [activeEngine, setActiveEngine] = useState<string>("Gemini 2.5 Flash Vision");
   const [confidence, setConfidence] = useState<number>(99.8);
@@ -27,19 +78,44 @@ export default function UploadSolvePage() {
     return { ...s, executionTimeMs: 0.5 };
   });
 
+  const handleSelectedFile = (file: File) => {
+    setAnalysisError(null);
+    setHistoryNotice(null);
+
+    if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
+      setAnalysisError("Unsupported file type. Choose a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setAnalysisError("That image is larger than 10 MB. Choose a smaller file.");
+      return;
+    }
+
+    setFileName(file.name);
+    setFileSize((file.size / (1024 * 1024)).toFixed(2) + " MB");
+    setUploadRotation(0);
+    setIsUploadInverted(false);
+    setIsConfirming(false);
+    setIsEditingExpression(false);
+    setHistoryId(null);
+    setIsUploadStarred(false);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result;
+      if (typeof result !== "string") return;
+      setCustomImage(result);
+      const image = new Image();
+      image.onload = () => setImageDimensions(`${image.naturalWidth}×${image.naturalHeight} px`);
+      image.src = result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      setFileSize((file.size / (1024 * 1024)).toFixed(2) + " MB");
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCustomImage(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) handleSelectedFile(file);
+    e.target.value = "";
   };
 
   const handleCopyUploadLatex = async () => {
@@ -64,82 +140,182 @@ export default function UploadSolvePage() {
 
   const handleAnalyzeUpload = async () => {
     setIsAnalyzingUpload(true);
-    setUploadFeedbackText("Running Hybrid OCR (Tesseract + Gemini)...");
+    setUploadFeedbackText("Running OCR (Tesseract + Gemini)...");
     setAnalysisError(null);
+    setHistoryNotice(null);
 
     try {
-      const payloadImage = customImage;
-      if (!payloadImage) {
-        setUploadFeedbackText("Analysis complete (Sample formula)");
-        setTimeout(() => {
-          setIsAnalyzingUpload(false);
-          setUploadFeedbackText(null);
-        }, 800);
+      if (!customImage) {
+        setAnalysisError("Choose a JPG, PNG, or WebP image before running OCR.");
+        setIsAnalyzingUpload(false);
+        setUploadFeedbackText(null);
         return;
       }
 
-      // Step 1: Run local optical symbol scan with Tesseract.js
-      let tesseractCandidate = '';
+      let payloadImage: string;
       try {
-        setUploadFeedbackText("Phase 1: Local Optical Symbol Scanning (Tesseract)...");
-        const { createWorker } = await import('tesseract.js');
-        const worker = await createWorker('eng');
+        payloadImage = await prepareUploadImage(customImage, uploadRotation, isUploadInverted);
+      } catch {
+        setAnalysisError("The selected image could not be prepared. Try another file.");
+        setIsAnalyzingUpload(false);
+        setUploadFeedbackText(null);
+        return;
+      }
+
+      let tesseractCandidate = "";
+      try {
+        setUploadFeedbackText("Phase 1: Local optical scan (Tesseract)...");
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker("eng");
         await worker.setParameters({
-          tessedit_char_whitelist: '0123456789+-*/=^()xyzXYZabAB ',
-          tessedit_pageseg_mode: '6' as unknown as import('tesseract.js').PSM,
+          tessedit_char_whitelist: "0123456789+-*/=^()xyzXYZabAB ",
+          tessedit_pageseg_mode: "6" as unknown as import("tesseract.js").PSM,
         });
         const tRes = await worker.recognize(payloadImage);
-        if (tRes.data && tRes.data.text) {
+        if (tRes.data?.text) {
           tesseractCandidate = tRes.data.text.trim();
         }
         await worker.terminate();
       } catch (tErr) {
-        console.warn('Tesseract upload scan skipped:', tErr);
+        console.warn("Tesseract upload scan skipped:", tErr);
       }
 
-      // Step 2: Pass both image and Tesseract candidate hint to Gemini
-      setUploadFeedbackText("Phase 2: Multimodal Reconciliation with Gemini Vision...");
-      const res = await fetch('/api/ocr/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: payloadImage,
-          mimeType: 'image/jpeg',
-          ocrHint: tesseractCandidate || undefined,
-        }),
-      });
+      setUploadFeedbackText("Phase 2: Reconciling with Gemini Vision...");
+      let geminiError = false;
+      try {
+        const res = await fetch("/api/ocr/gemini", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: payloadImage,
+            mimeType: "image/jpeg",
+            ocrHint: tesseractCandidate || undefined,
+          }),
+        });
 
-      if (!res.ok) {
-        throw new Error('Gemini OCR API encountered an issue');
+        if (!res.ok) {
+          geminiError = true;
+        } else {
+          const data = await res.json();
+          if (data.expression && data.expression.trim()) {
+            const recognized = data.expression.trim();
+            setExpression(recognized);
+            setRecognizedText(recognized);
+            setLatexExpr(data.latex || recognized);
+            setConfidence(data.confidence || 98.5);
+            setActiveEngine(tesseractCandidate ? "Ensemble: Tesseract + Gemini" : "Gemini 2.5 Flash Vision");
+            setIsConfirming(true);
+            setIsEditingExpression(true);
+            setHistoryId(null);
+            setIsUploadStarred(false);
+            setUploadFeedbackText("Recognized. Review and confirm the expression to solve.");
+            return;
+          }
+          geminiError = true;
+        }
+      } catch {
+        geminiError = true;
       }
 
-      const data = await res.json();
-      if (data.expression) {
-        setExpression(data.expression);
-        setLatexExpr(data.latex || data.expression);
-        setConfidence(data.confidence || 98.5);
-        setActiveEngine(tesseractCandidate ? 'Ensemble: Tesseract + Gemini' : 'Gemini 2.5 Flash');
-        const sol = solveMathProblem(data.expression);
-        setSolution(sol);
-        setUploadFeedbackText(`Solved: ${data.expression}`);
-      } else {
-        throw new Error('No formula recognized');
+      if (tesseractCandidate) {
+        setExpression(tesseractCandidate);
+        setRecognizedText(tesseractCandidate);
+        setLatexExpr(tesseractCandidate);
+        setConfidence(75);
+        setActiveEngine("Local Tesseract fallback");
+        setIsConfirming(true);
+        setIsEditingExpression(true);
+        setHistoryId(null);
+        setIsUploadStarred(false);
+        setAnalysisError(
+          geminiError
+            ? "Gemini OCR was unavailable. The local Tesseract result is shown for confirmation."
+            : "Gemini did not return a usable expression. The local Tesseract result is shown."
+        );
+        setUploadFeedbackText("Review the fallback result before solving.");
+        return;
       }
+
+      setAnalysisError("No mathematical expression was recognized. Try a clearer image or edit manually.");
+      setUploadFeedbackText("Recognition failed. You can enter the expression manually.");
+      setIsEditingExpression(true);
+      setIsConfirming(true);
     } catch (err: unknown) {
-      console.warn('Upload OCR error:', err);
-      const msg = err instanceof Error ? err.message : 'Recognition error';
+      console.warn("Upload OCR error:", err);
+      const msg = err instanceof Error ? err.message : "Recognition error";
       setAnalysisError(msg);
-      setUploadFeedbackText('Fallback: using existing formula');
+      setUploadFeedbackText("Recognition failed. Edit the expression manually or try another image.");
+      setIsEditingExpression(true);
+      setIsConfirming(true);
     } finally {
-
       setTimeout(() => {
         setIsAnalyzingUpload(false);
         setUploadFeedbackText(null);
-      }, 1200);
+      }, 1400);
     }
   };
 
+  const handleConfirmExpression = async (result: SolutionResult) => {
+    setSolution(result);
+    setLatexExpr(result.latexExpression);
+    setIsConfirming(false);
+    setIsEditingExpression(false);
+    setUploadFeedbackText(`Solved: ${result.finalAnswerPlain}`);
+    setAnalysisError(null);
+    setHistoryNotice(null);
 
+    try {
+      const record = await saveHistory({
+        inputType: "upload",
+        expression: result.normalizedExpression,
+        recognizedText,
+        latex: result.latexExpression,
+        problemType: result.problemType,
+        finalAnswerPlain: result.finalAnswerPlain,
+        finalAnswerLatex: result.finalAnswerLatex,
+        steps: result.steps,
+        isVerified: result.isVerified,
+      });
+      setHistoryId(record.id);
+      setIsUploadStarred(record.favorite);
+      setHistoryNotice("Saved to Notebook.");
+    } catch {
+      setHistoryNotice("Solved, but local history is unavailable in this browser.");
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!historyId) {
+      if (!solution.success) return;
+      try {
+        const record = await saveHistory({
+          inputType: "upload",
+          expression: solution.normalizedExpression,
+          recognizedText,
+          latex: solution.latexExpression,
+          problemType: solution.problemType,
+          finalAnswerPlain: solution.finalAnswerPlain,
+          finalAnswerLatex: solution.finalAnswerLatex,
+          steps: solution.steps,
+          isVerified: solution.isVerified,
+          favorite: true,
+        });
+        setHistoryId(record.id);
+        setIsUploadStarred(true);
+        setHistoryNotice("Saved to Notebook.");
+      } catch {
+        setHistoryNotice("Could not update local history.");
+      }
+      return;
+    }
+    const next = !isUploadStarred;
+    setIsUploadStarred(next);
+    try {
+      await setHistoryFavorite(historyId, next);
+    } catch {
+      setHistoryNotice("Could not update local history.");
+    }
+  };
 
   return (
           <div className="flex flex-col w-full">
@@ -166,7 +342,7 @@ export default function UploadSolvePage() {
                     <span className="font-caption text-caption text-ink-muted uppercase">Execution Target</span>
                     <span className="font-code-sm text-code-sm font-bold text-ink flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-sage"></span>
-                      SymEngine WASM
+                      TypeScript CAS
                     </span>
                   </div>
                   <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
@@ -174,9 +350,9 @@ export default function UploadSolvePage() {
                     <span className="font-code-sm text-code-sm font-bold text-ink">0.45 s</span>
                   </div>
                   <div className="flex flex-col px-space-xs">
-                    <span className="font-caption text-caption text-ink-muted uppercase">Privacy Guarantee</span>
+                    <span className="font-caption text-caption text-ink-muted uppercase">AI Scope</span>
                     <span className="font-code-sm text-code-sm font-bold text-secondary flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">shield</span> Local Only
+                      <span className="material-symbols-outlined text-[14px]">shield</span> OCR only
                     </span>
                   </div>
                 </div>
@@ -208,15 +384,15 @@ export default function UploadSolvePage() {
                         <div className="flex items-center justify-between">
                           <span className="px-2 py-0.5 rounded bg-amber text-ink font-code-sm text-[11px] font-semibold tracking-wide flex items-center gap-1 shadow-sm">
                             <span className="material-symbols-outlined text-[13px]">crop_free</span>
-                            ROI #01 • Quadratic
+                            ROI #01 • {solution.problemType}
                           </span>
                           <span className="px-1.5 py-0.5 rounded bg-surface/90 text-ink font-code-sm text-[10px] backdrop-blur-sm shadow-xs">
-                            99.8% Match
+                            {confidence}% Match
                           </span>
                         </div>
                         <div className="flex items-end justify-between">
                           <span className="font-code-sm text-[10px] text-ink bg-surface/90 px-1.5 py-0.5 rounded backdrop-blur-sm shadow-xs">
-                            Orientation: {uploadRotation}.00° • Clean
+                            Orientation: {uploadRotation}.00° • {isUploadInverted ? 'Inverted' : 'Clean'}
                           </span>
                           <span className="w-2.5 h-2.5 bg-amber rounded-full ring-2 ring-white/80"></span>
                         </div>
@@ -238,14 +414,12 @@ export default function UploadSolvePage() {
                       <div className="flex items-center gap-2 text-ink-muted">
                         <span>{fileSize}</span>
                         <span>•</span>
-                        <span>2400×1600 px</span>
-                        <span>•</span>
-                        <span className="px-1.5 py-0.5 rounded bg-surface font-semibold text-ink shadow-xs">300 DPI</span>
+                        <span>{imageDimensions}</span>
                       </div>
                     </div>
 
                     {/* Quick Image Manipulation Toolbar */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <div className="grid grid-cols-3 gap-2 pt-1">
                       <button
                         onClick={() => setUploadRotation((prev) => (prev + 90) % 360)}
                         className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors text-ink font-body-sm text-body-sm font-medium cursor-pointer"
@@ -253,14 +427,6 @@ export default function UploadSolvePage() {
                       >
                         <span className="material-symbols-outlined text-[17px]">rotate_right</span>
                         <span>Rotate 90°</span>
-                      </button>
-                      <button
-                        onClick={() => {}}
-                        className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors text-ink font-body-sm text-body-sm font-medium cursor-pointer"
-                        type="button"
-                      >
-                        <span className="material-symbols-outlined text-[17px]">crop</span>
-                        <span>Crop Equation</span>
                       </button>
                       <button
                         onClick={() => setIsUploadInverted((prev) => !prev)}
@@ -291,23 +457,46 @@ export default function UploadSolvePage() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*,.pdf,.svg"
+                      accept="image/jpeg,image/png,image/webp"
                       className="hidden"
                       onChange={handleFileChange}
                     />
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="rounded-lg p-space-md flex flex-col items-center justify-center text-center gap-2 bg-canvas/70 hover:bg-canvas transition-colors cursor-pointer group border border-hairline border-dashed"
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setIsDragActive(true);
+                      }}
+                      onDragLeave={() => setIsDragActive(false)}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        setIsDragActive(false);
+                        const file = event.dataTransfer.files?.[0];
+                        if (file) handleSelectedFile(file);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          fileInputRef.current?.click();
+                        }
+                      }}
+                      className={`rounded-lg p-space-md flex flex-col items-center justify-center text-center gap-2 transition-colors cursor-pointer group border border-dashed ${
+                        isDragActive
+                          ? "bg-amber/10 border-amber"
+                          : "bg-canvas/70 hover:bg-canvas border-hairline"
+                      }`}
                     >
                       <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center shadow-sm text-primary group-hover:scale-105 transition-transform">
                         <span className="material-symbols-outlined text-[22px]">cloud_upload</span>
                       </div>
                       <div className="flex flex-col">
                         <span className="font-body-sm text-body-sm font-medium text-ink">
-                          Drag new image here, or <span className="text-primary underline cursor-pointer">browse filesystem</span>
+                          Drag an image here, or <span className="text-primary underline cursor-pointer">browse filesystem</span>
                         </span>
                         <span className="font-code-sm text-code-sm text-ink-muted">
-                          Accepts PNG, JPG, WebP, SVG, MathML, or single-page PDF
+                          JPG, PNG, or WebP • maximum 10 MB
                         </span>
                       </div>
                     </div>
@@ -317,38 +506,41 @@ export default function UploadSolvePage() {
                   <div className="flex flex-col sm:flex-row items-center gap-space-sm pt-2">
                     <button
                       onClick={handleAnalyzeUpload}
-                      className="w-full sm:flex-1 h-[54px] rounded-full bg-amber hover:brightness-105 active:scale-[0.99] transition-all text-ink font-semibold font-body-lg text-body-lg flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                      disabled={isAnalyzingUpload}
+                      className="w-full sm:flex-1 h-[54px] rounded-full bg-amber hover:brightness-105 active:scale-[0.99] transition-all text-ink font-semibold font-body-lg text-body-lg flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:cursor-wait disabled:opacity-70"
                       type="button"
                     >
                       {isAnalyzingUpload ? (
                         <>
                           <span className="material-symbols-outlined text-[22px] animate-spin">refresh</span>
-                          <span>{uploadFeedbackText || 'Analyzing Uploaded Frame...'}</span>
+                          <span>{uploadFeedbackText || 'Reading image...'}</span>
                         </>
                       ) : (
                         <>
-                          <span className="material-symbols-outlined text-[22px]">bolt</span>
-                          <span>Analyze &amp; Solve Uploaded Photo</span>
+                          <span className="material-symbols-outlined text-[22px]">document_scanner</span>
+                          <span>Read Image &amp; Confirm</span>
                         </>
                       )}
                     </button>
                     <button
-                      onClick={() => {}}
+                      onClick={() => fileInputRef.current?.click()}
                       className="w-full sm:w-auto h-[54px] px-space-md rounded-full bg-surface hover:bg-surface-container transition-colors text-ink font-body-sm text-body-sm font-medium flex items-center justify-center gap-2 shadow-sm cursor-pointer border border-hairline"
                       type="button"
                     >
-                      <span className="material-symbols-outlined text-[18px]">folder_zip</span>
-                      <span className="whitespace-nowrap">Batch Upload Worksheets</span>
+                      <span className="material-symbols-outlined text-[18px]">folder_open</span>
+                      <span className="whitespace-nowrap">Choose Another Image</span>
                     </button>
                   </div>
 
-                  {/* Local CAS Privacy Assurance Card */}
+                  {/* OCR disclosure */}
                   <div className="p-space-md rounded-xl bg-surface-container-low flex items-start gap-space-sm border border-hairline">
                     <span className="material-symbols-outlined text-secondary text-[20px] mt-0.5">verified_user</span>
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-headline-sm text-[14px] leading-tight font-semibold text-ink">Air-Gapped Client Ingestion</span>
+                      <span className="font-headline-sm text-[14px] leading-tight font-semibold text-ink">AI-Assisted OCR, Local Solving</span>
                       <p className="font-body-sm text-[13px] leading-relaxed text-ink-muted">
-                        Photographs are binarized and parsed via WebAssembly on your hardware. Pixels never leave this browser tab, adhering to academic privacy and FERPA constraints.
+                        The selected image is sent through this app&apos;s server to Gemini for recognition
+                        and is not stored by MathLens. Tesseract runs in your browser as a fallback.
+                        Parsing, solving, and verification stay deterministic and local.
                       </p>
                     </div>
                   </div>
@@ -367,39 +559,94 @@ export default function UploadSolvePage() {
                     <span className="font-code-sm text-code-sm text-ink-muted">Confidence: {confidence}%</span>
                   </div>
 
+                  {analysisError && (
+                    <div role="alert" className="rounded-lg border border-error/30 bg-error-container/50 px-3 py-2 font-body-sm text-sm text-error">
+                      {analysisError}
+                    </div>
+                  )}
+
                   {/* Extracted Formula & LaTeX Viewport */}
                   <div className="bg-surface rounded-xl shadow-sm p-space-md flex flex-col gap-space-sm border border-hairline">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-caption text-caption uppercase text-ink-muted tracking-wider">Recognized Math Expression</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sage text-ink font-body-sm text-[12px] font-medium">
-                        <span className="material-symbols-outlined text-[14px]">check</span>
-                        {solution.problemType}
-                      </span>
-                    </div>
-                    {/* Typeset Formula in Classical Display Style */}
-                    <div className="py-space-md px-space-lg rounded-lg bg-canvas/60 flex items-center justify-center text-center border border-hairline">
-                      <span className="font-serif text-3xl md:text-4xl tracking-wide text-ink select-all">
-                        {latexExpr || expression}
-                      </span>
-                    </div>
-                    {/* Raw LaTeX Code Line with Copy Shortcut */}
-                    <div className="flex items-center justify-between gap-space-sm p-2 rounded-lg bg-surface-container-low font-code-input text-code-input text-ink border border-hairline">
-                      <div className="flex items-center gap-2 truncate pl-1">
-                        <span className="text-outline text-xs select-none">Equation:</span>
-                        <code className="font-code-input text-[13px] select-all truncate text-ink">{expression}</code>
-                      </div>
-                      <button
-                        onClick={handleCopyUploadLatex}
-                        className="px-2.5 py-1 rounded bg-surface hover:bg-surface-container font-code-sm text-code-sm text-ink transition-colors flex items-center gap-1 shadow-sm shrink-0 cursor-pointer border border-hairline"
-                        type="button"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">
-                          {copiedUploadType === 'latex' ? 'check' : 'content_copy'}
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-body-sm text-[12px] font-medium ${
+                          isConfirming ? 'bg-amber/20 text-ink' : 'bg-sage text-ink'
+                        }`}>
+                          <span className="material-symbols-outlined text-[14px]">
+                            {isConfirming ? 'edit_note' : 'check'}
+                          </span>
+                          {isConfirming ? 'Needs confirmation' : solution.problemType}
                         </span>
-                        <span>{copiedUploadType === 'latex' ? 'Copied' : 'Copy'}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditingExpression((value) => !value);
+                            if (!isEditingExpression) setIsConfirming(true);
+                          }}
+                          className="flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5 font-code-sm text-[10px] text-ink-muted transition-colors hover:bg-surface-container hover:text-ink"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">edit</span>
+                          {isEditingExpression ? 'Close' : 'Edit'}
+                        </button>
+                      </div>
                     </div>
+
+                    {isEditingExpression ? (
+                      <ExpressionEditor
+                        value={expression}
+                        onChange={(next) => {
+                          setExpression(next);
+                          setIsConfirming(true);
+                          setHistoryId(null);
+                          setIsUploadStarred(false);
+                        }}
+                        onConfirm={handleConfirmExpression}
+                        confirmLabel="Confirm & Solve"
+                        inputId="upload-expression"
+                      />
+                    ) : (
+                      <>
+                        <div className="py-space-md px-space-lg rounded-lg bg-canvas/60 flex items-center justify-center text-center border border-hairline overflow-x-auto">
+                          <MathRenderer math={latexExpr || expression} block className="text-2xl text-ink md:text-3xl" />
+                        </div>
+                        <div className="flex items-center justify-between gap-space-sm p-2 rounded-lg bg-surface-container-low font-code-input text-code-input text-ink border border-hairline">
+                          <div className="flex items-center gap-2 truncate pl-1">
+                            <span className="text-outline text-xs select-none">Equation:</span>
+                            <code className="font-code-input text-[13px] select-all truncate text-ink">{expression}</code>
+                          </div>
+                          <button
+                            onClick={handleCopyUploadLatex}
+                            className="px-2.5 py-1 rounded bg-surface hover:bg-surface-container font-code-sm text-code-sm text-ink transition-colors flex items-center gap-1 shadow-sm shrink-0 cursor-pointer border border-hairline"
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {copiedUploadType === 'latex' ? 'check' : 'content_copy'}
+                            </span>
+                            <span>{copiedUploadType === 'latex' ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
+
+                  {analysisError && (
+                    <div className="rounded-xl border border-error/30 bg-error-container/30 p-space-md flex items-start gap-2 text-ink">
+                      <span className="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">error</span>
+                      <p className="font-body-sm text-[13px]">{analysisError}</p>
+                    </div>
+                  )}
+
+                  {isConfirming && (
+                    <div className="rounded-xl border border-amber/40 bg-amber/10 p-space-md">
+                      <p className="font-body-sm text-sm font-semibold text-ink">Confirm before solving</p>
+                      <p className="mt-1 font-body-sm text-[13px] text-ink-muted">
+                        OCR output is untrusted. Check the expression above and press Confirm &amp; Solve.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className={isConfirming ? 'hidden' : 'contents'}>
 
                   {/* Canonical Result Hero Box */}
                   <div className="bg-surface rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md relative overflow-hidden border border-hairline">
@@ -430,73 +677,42 @@ export default function UploadSolvePage() {
                       <div className="flex items-center gap-2 text-ink">
                         <span className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
                         <span className="font-body-sm text-[13px] font-medium">
-                          {solution.isVerified ? '✓ Verified by direct check' : 'Analytical Proof Generated'}
+                          {solution.isVerified ? '✓ Verified by direct check' : 'Derivation completed'}
                         </span>
                       </div>
                       <span className="font-code-sm text-code-sm font-semibold text-secondary">
-                        {solution.verificationDetails?.status || 'Active Proof'}
+                        {solution.verificationDetails?.status || 'Verification Status'}
                       </span>
                     </div>
                   </div>
 
 
-                  {/* Rigorous Step Derivations */}
-                  <div className="flex flex-col gap-space-xs">
-                    <div className="flex items-center justify-between px-space-xs py-1">
-                      <span className="font-caption text-caption uppercase font-semibold text-ink-muted tracking-wider">Step-by-Step Solution</span>
-                      <span className="font-caption text-caption text-ink-muted">
-                        {solution.steps?.length ? `${solution.steps.length} verified steps` : 'Verified breakdown'}
-                      </span>
-                    </div>
 
-                    {solution.steps && solution.steps.length > 0 ? (
-                      solution.steps.map((st) => (
-                        <div key={st.stepNumber} className="bg-surface rounded-xl p-space-md shadow-sm flex items-start gap-space-md border border-hairline">
-                          <div className="w-7 h-7 rounded-full bg-amber/20 text-ink font-code-sm text-code-sm font-semibold flex items-center justify-center shrink-0 mt-0.5">
-                            {String(st.stepNumber).padStart(2, '0')}
-                          </div>
-                          <div className="flex flex-col gap-1 w-full min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className="font-body-sm text-body-sm font-semibold text-ink">{st.title}</span>
-                              <span className="font-code-sm text-[11px] text-ink-muted bg-surface-container px-1.5 py-0.5 rounded border border-hairline">
-                                {st.rule}
-                              </span>
-                            </div>
-                            <p className="font-body-sm text-body-sm text-ink-muted">{st.description}</p>
-                            {st.mathExpression && (
-                              <div className="p-2 rounded bg-surface-container-low font-code-input text-[13px] text-ink border border-hairline">
-                                {st.mathExpression}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="bg-surface rounded-xl p-space-md shadow-sm border border-hairline text-ink-muted text-sm">
-                        Direct evaluation complete: <span className="font-semibold text-ink">{solution.finalAnswerPlain}</span>
-                      </div>
-                    )}
-                  </div>
+                  {/* Complete Written Solution in Text Form (One Go) */}
+                  <CompleteSolutionNarrative
+                    solution={solution}
+                    originalProblem={expression}
+                    idPrefix="upload-narrative"
+                  />
 
-                  {/* Client-Side WASM Verification Audit Log */}
+                  {/* Client-Side Verification Audit Log */}
                   <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col gap-2 font-code-input text-[12px] border border-hairline">
                     <div className="flex items-center justify-between text-ink-muted pb-1 border-b border-hairline font-code-sm">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-secondary"></span>
+                        <span className={`w-2 h-2 rounded-full ${solution.isVerified ? 'bg-secondary' : 'bg-amber'}`}></span>
                         Deterministic Verification Audit (Client-Side)
                       </span>
-                      <span>Proof Hash: #0x82b4f9</span>
+                      <span>{solution.verificationDetails.status}</span>
                     </div>
-                    <p className="text-secondary font-code-sm">
-                      {`// Testing root candidate x = 2 ➔ f(2) = (2)² − 5(2) + 6 = 4 − 10 + 6 = 0 ✓ Identity satisfied`}
+                    <p className="text-ink font-code-sm break-all">
+                      {`// f(x) := ${solution.normalizedExpression}`}
                     </p>
-                    <p className="text-secondary font-code-sm">
-                      {`// Testing root candidate x = 3 ➔ f(3) = (3)² − 5(3) + 6 = 9 − 15 + 6 = 0 ✓ Identity satisfied`}
+                    <p className={solution.isVerified ? 'text-secondary font-code-sm' : 'text-error font-code-sm'}>
+                      {`// LHS = ${solution.verificationDetails.lhsValue} | RHS = ${solution.verificationDetails.rhsValue}`}
                     </p>
                     <p className="text-ink-muted font-code-sm">
-                      {`// Symbolic check: Expand[(x-2)(x-3)] - (x^2 - 5x + 6) ➔ Null remainder [0]`}
+                      {`// Residual norm = ${solution.verificationDetails.residualNorm.toExponential(2)} | verified = ${solution.isVerified}`}
                     </p>
-
                   </div>
 
                   {/* Action Row Toolbar */}
@@ -519,11 +735,12 @@ export default function UploadSolvePage() {
                         <span>{copiedUploadType === 'plain' ? 'Copied Plaintext!' : 'Copy Plaintext'}</span>
                       </button>
                       <button
-                        onClick={() => setIsUploadStarred((prev) => !prev)}
+                        onClick={handleToggleFavorite}
                         className={`px-3.5 py-2 rounded-full bg-surface hover:bg-surface-container transition-colors font-body-sm text-body-sm font-medium flex items-center gap-1.5 shadow-sm cursor-pointer border border-hairline ${
                           isUploadStarred ? 'text-amber' : 'text-ink'
                         }`}
                         type="button"
+                        aria-pressed={isUploadStarred}
                       >
                         <span
                           className="material-symbols-outlined text-[16px]"
@@ -539,64 +756,20 @@ export default function UploadSolvePage() {
                       className="px-4 py-2 rounded-full bg-amber hover:brightness-105 active:scale-[0.99] transition-all text-ink font-body-sm text-body-sm font-semibold flex items-center gap-1.5 shadow-sm cursor-pointer"
                       type="button"
                     >
-                      <span>Solve Another</span>
-                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                      <span>Re-run OCR</span>
+                      <span className="material-symbols-outlined text-[16px]">refresh</span>
                     </button>
+                  </div>
+                  {historyNotice && (
+                    <p role="status" className="px-space-xs font-code-sm text-[11px] text-ink-muted">
+                      {historyNotice}
+                    </p>
+                  )}
                   </div>
                 </section>
               </div>
 
-              {/* Related Document Ingestion Queue */}
-              <section className="mt-space-lg pt-space-lg border-t border-hairline flex flex-col gap-space-md">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-outline text-[20px]">photo_library</span>
-                    <span className="font-headline-sm text-headline-sm text-ink font-semibold">Recent Document Ingestion Queue</span>
-                  </div>
-                  <span className="font-code-sm text-code-sm text-ink-muted">4 Files Processed in Session</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
-                  {/* Queue Card 1 */}
-                  <div className="p-space-md rounded-xl bg-surface shadow-sm flex flex-col justify-between gap-space-md group hover:bg-surface-container-low transition-colors border border-hairline">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-col">
-                        <span className="font-body-sm font-semibold text-ink truncate">midterm_sample_q12.jpg</span>
-                        <span className="font-caption text-caption text-ink-muted">Integration by Parts • 2.1 MB</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-caption text-[11px] font-semibold">SOLVED</span>
-                    </div>
-                    <div className="p-2 rounded bg-canvas/70 font-serif text-lg text-ink truncate border border-hairline">
-                      ∫ x · e^(2x) dx = ½ x e^(2x) − ¼ e^(2x) + C
-                    </div>
-                  </div>
-                  {/* Queue Card 2 */}
-                  <div className="p-space-md rounded-xl bg-surface shadow-sm flex flex-col justify-between gap-space-md group hover:bg-surface-container-low transition-colors border border-hairline">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-col">
-                        <span className="font-body-sm font-semibold text-ink truncate">textbook_matrix_p104.png</span>
-                        <span className="font-caption text-caption text-ink-muted">Eigenvalue Decomposition • 840 KB</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-caption text-[11px] font-semibold">SOLVED</span>
-                    </div>
-                    <div className="p-2 rounded bg-canvas/70 font-serif text-lg text-ink truncate border border-hairline">
-                      det(A − λI) = 0 ⟹ λ₁ = 4, λ₂ = −1
-                    </div>
-                  </div>
-                  {/* Queue Card 3 */}
-                  <div className="p-space-md rounded-xl bg-surface shadow-sm flex flex-col justify-between gap-space-md group hover:bg-surface-container-low transition-colors border border-hairline">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-col">
-                        <span className="font-body-sm font-semibold text-ink truncate">board_photo_oct24.png</span>
-                        <span className="font-caption text-caption text-ink-muted">First Order ODE • 3.2 MB</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-caption text-[11px] font-semibold">SOLVED</span>
-                    </div>
-                    <div className="p-2 rounded bg-canvas/70 font-serif text-lg text-ink truncate border border-hairline">
-                      dy/dx + 2y = 4 ⟹ y(x) = 2 + C·e^(−2x)
-                    </div>
-                  </div>
-                </div>
-              </section>
+
             </div>
           </div>
   );

@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Sign In • MathLens | Access Academic Mathematical Workspace',
   description:
-    'Sign in to MathLens using Google or email OTP to synchronize your step-by-step math derivations, or continue offline as guest. 100% private, zero external AI APIs.',
+    'Sign in to MathLens using Google or email OTP, or continue as a guest. Gemini handles optional OCR; solving and saved history stay deterministic and on-device.',
   keywords: [
     'math solver sign in',
     'mathlens login',
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Sign In • MathLens Mathematical Workspace',
     description:
-      'Access your private, deterministic math notebook. Solve quadratic equations, calculus, and linear systems client-side.',
+      'Access your private, deterministic math notebook. Solve arithmetic, linear, and quadratic problems with a deterministic client-side engine.',
     url: 'https://mathlens-rho.vercel.app/auth',
     siteName: 'MathLens',
     type: 'website',
@@ -45,7 +45,7 @@ export default function AuthLayout({
     name: 'Sign In • MathLens Academic Workspace',
     url: 'https://mathlens-rho.vercel.app/auth',
     description:
-      'Sign in to MathLens using Google or email OTP to synchronize step-by-step math derivations, or continue offline as guest.',
+      'Sign in to MathLens using Google or email OTP to save step-by-step derivations, or continue locally as a guest.',
     isPartOf: {
       '@type': 'WebSite',
       name: 'MathLens',

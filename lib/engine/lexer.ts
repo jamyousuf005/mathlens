@@ -1,46 +1,59 @@
-/**
- * MathLens Engine - Lexer (Tokenizer)
- * FR-ME-02: Converts mathematical expression string into formal token stream.
- */
-
-// NOTE: `tokenize` is exported for future formal parser integration.
-// The main solver pipeline currently uses its own lightweight string-based term
-// extraction. When a full recursive-descent parser is wired in, import from here.
+import { MathParseError } from './errors';
 import { Token } from './types';
 
 export function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
+  const len = input.length;
 
-  while (i < input.length) {
+  while (i < len) {
     const char = input[i];
 
-    // Skip whitespace
     if (/\s/.test(char)) {
       i++;
       continue;
     }
 
-    // Number (integers and floating decimals)
-    if (/\d/.test(char) || (char === '.' && i + 1 < input.length && /\d/.test(input[i + 1]))) {
-      let numStr = '';
+    if (/\d/.test(char) || (char === '.' && i + 1 < len && /\d/.test(input[i + 1]))) {
       const startPos = i;
-      while (i < input.length && (/\d/.test(input[i]) || input[i] === '.')) {
-        numStr += input[i];
-        i++;
+      let numStr = '';
+      let seenDot = false;
+      while (i < len) {
+        const current = input[i];
+        if (/\d/.test(current)) {
+          numStr += current;
+          i++;
+          continue;
+        }
+        if (current === '.') {
+          if (seenDot) {
+            throw new MathParseError('Invalid number literal', i);
+          }
+          seenDot = true;
+          numStr += current;
+          i++;
+          continue;
+        }
+        break;
+      }
+      if (numStr === '.' || numStr === '') {
+        throw new MathParseError('Invalid number literal', startPos);
       }
       tokens.push({ type: 'NUMBER', value: numStr, position: startPos });
       continue;
     }
 
-    // Variable Identifier (x, y, z, etc.)
     if (/[a-zA-Z]/.test(char)) {
-      tokens.push({ type: 'IDENTIFIER', value: char, position: i });
-      i++;
+      const startPos = i;
+      let name = '';
+      while (i < len && /[a-zA-Z]/.test(input[i])) {
+        name += input[i];
+        i++;
+      }
+      tokens.push({ type: 'IDENTIFIER', value: name, position: startPos });
       continue;
     }
 
-    // Mathematical Operators
     switch (char) {
       case '+':
         tokens.push({ type: 'PLUS', value: '+', position: i });
@@ -67,7 +80,7 @@ export function tokenize(input: string): Token[] {
         tokens.push({ type: 'RPAREN', value: ')', position: i });
         break;
       default:
-        throw new Error(`Unexpected character '${char}' at index ${i}`);
+        throw new MathParseError(`Unexpected character '${char}' at index ${i}`, i);
     }
     i++;
   }
