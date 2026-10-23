@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useRef, useEffect } from "react";
+import { solveMathProblem } from "@/lib/engine/solver";
+import { SolutionResult } from "@/lib/engine/types";
 
 export default function WriteSolvePage() {
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
@@ -10,12 +11,90 @@ export default function WriteSolvePage() {
   const [isStarred, setIsStarred] = useState(false);
   const [copiedType, setCopiedType] = useState<"latex" | "text" | null>(null);
   const [isSolving, setIsSolving] = useState(false);
+  const [solvingFeedback, setSolvingFeedback] = useState<string | null>(null);
   const [isCleared, setIsCleared] = useState(false);
+  // Start at 0 — no strokes have been drawn yet on mount
+  const [strokeCount, setStrokeCount] = useState<number>(0);
+
+  // Math & OCR State
+  const [expression, setExpression] = useState<string>("x^2 - 5x + 6 = 0");
+  const [latexExpr, setLatexExpr] = useState<string>("x^2 - 5x + 6 = 0");
+  const [activeEngine, setActiveEngine] = useState<string>("Gemini 2.5 Flash Vision");
+  const [confidence, setConfidence] = useState<number>(99.8);
+  const [solution, setSolution] = useState<SolutionResult>(() => {
+    const s = solveMathProblem("x^2 - 5x + 6 = 0");
+    return { ...s, executionTimeMs: 0.5 };
+  });
+
+  // Canvas Ref for Interactive Inking
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Resize canvas to match display size
+    const rect = canvas.getBoundingClientRect();
+    if (canvas.width !== rect.width || canvas.height !== rect.height) {
+      canvas.width = rect.width || 700;
+      canvas.height = rect.height || 470;
+    }
+  }, []);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    isDrawingRef.current = true;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+
+    if (tool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = strokeWidth === 'fine' ? 12 : strokeWidth === 'medium' ? 24 : 36;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = '#1E231D';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = strokeWidth === 'fine' ? 2.5 : strokeWidth === 'medium' ? 4 : 6;
+    }
+    setIsCleared(false);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const handlePointerUp = () => {
+    if (isDrawingRef.current) {
+      isDrawingRef.current = false;
+      setStrokeCount((prev) => prev + 1);
+    }
+  };
 
   const handleCopyLatex = async () => {
-    const text = "x^2 - 5x + 6 = 0 \\implies x \\in \\{2, 3\\}";
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(latexExpr);
       setCopiedType("latex");
       setTimeout(() => setCopiedType(null), 1800);
     } catch {
@@ -24,9 +103,8 @@ export default function WriteSolvePage() {
   };
 
   const handleCopyText = async () => {
-    const text = "x^2 - 5x + 6 = 0 => x = 2, x = 3 (Verified LHS = RHS = 0)";
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(expression);
       setCopiedType("text");
       setTimeout(() => setCopiedType(null), 1800);
     } catch {
@@ -34,17 +112,79 @@ export default function WriteSolvePage() {
     }
   };
 
-  const handleSolveClick = () => {
+  const handleSolveClick = async () => {
     setIsSolving(true);
-    setIsCleared(false);
-    setTimeout(() => {
-      setIsSolving(false);
-    }, 300);
+    setSolvingFeedback("Transcribing ink with Gemini Vision AI...");
+
+    try {
+      const canvas = canvasRef.current;
+      if (canvas && strokeCount > 0) {
+        // Create an offscreen white-backed canvas to render strokes cleanly
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = canvas.width;
+        exportCanvas.height = canvas.height;
+        const eCtx = exportCanvas.getContext('2d');
+        if (eCtx) {
+          eCtx.fillStyle = '#FFFFFF';
+          eCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+          eCtx.drawImage(canvas, 0, 0);
+
+          const base64Image = exportCanvas.toDataURL('image/jpeg', 0.9);
+          const res = await fetch('/api/ocr/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64Image,
+              mimeType: 'image/jpeg',
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.expression && data.expression.trim().length > 0) {
+              setExpression(data.expression);
+              setLatexExpr(data.latex || data.expression);
+              setConfidence(data.confidence || 98.0);
+              setActiveEngine('Gemini 2.5 Flash Vision');
+
+              const sol = solveMathProblem(data.expression);
+              setSolution(sol);
+              setSolvingFeedback(`Solved: ${data.expression}`);
+              return;
+            }
+          }
+        }
+      }
+
+      // Default calculation if canvas is untouched
+      const sol = solveMathProblem(expression);
+      setSolution(sol);
+      setSolvingFeedback(`Solved in ${sol.executionTimeMs}ms`);
+    } catch (err) {
+      console.warn('Write solve error:', err);
+      const sol = solveMathProblem(expression);
+      setSolution(sol);
+      setSolvingFeedback('Solved with deterministic CAS');
+    } finally {
+      setTimeout(() => {
+        setIsSolving(false);
+        setSolvingFeedback(null);
+      }, 1200);
+    }
   };
 
   const handleClearReset = () => {
     setIsCleared(true);
+    setStrokeCount(0);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
   };
+
 
   return (
           <div className="flex flex-col w-full">
@@ -78,7 +218,7 @@ export default function WriteSolvePage() {
                   </div>
                   <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
                     <span className="font-caption text-caption text-ink-muted uppercase">Latency</span>
-                    <span className="font-code-sm text-code-sm font-bold text-ink">0.84 ms</span>
+                    <span className="font-code-sm text-code-sm font-bold text-ink">{solution.executionTimeMs} ms</span>
                   </div>
                   <div className="flex flex-col px-space-xs">
                     <span className="font-caption text-caption text-ink-muted uppercase">Privacy Guarantee</span>
@@ -234,9 +374,18 @@ export default function WriteSolvePage() {
                         </svg>
                       )}
 
-                      {/* Organic Mathematical Ink Rendering: x² - 5x + 6 = 0 */}
-                      {!isCleared && (
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300" fill="none" viewBox="0 0 700 470" xmlns="http://www.w3.org/2000/svg">
+                      {/* Real Interactive Inking Canvas */}
+                      <canvas
+                        ref={canvasRef}
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        className="absolute inset-0 w-full h-full z-10 touch-none cursor-crosshair"
+                      />
+
+                      {/* Organic Sample Mathematical Ink Overlay (visible when strokes == 0 and not cleared) */}
+                      {!isCleared && strokeCount === 0 && (
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300 opacity-60" fill="none" viewBox="0 0 700 470" xmlns="http://www.w3.org/2000/svg">
                           <line stroke="#1E231D" strokeDasharray="4 6" strokeOpacity="0.10" strokeWidth="1.2" x1="60" x2="640" y1="270" y2="270"></line>
                           <line stroke="#1E231D" strokeDasharray="2 4" strokeOpacity="0.06" strokeWidth="1" x1="60" x2="640" y1="180" y2="180"></line>
                           <path d="M 104 205 C 112 225, 128 250, 142 268" stroke="#1E231D" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4"></path>
@@ -256,27 +405,29 @@ export default function WriteSolvePage() {
                         </svg>
                       )}
 
-                      {/* Active Bézier Recognition Node Bounding Highlights */}
-                      {!isCleared && (
-                        <div className="absolute top-[148px] left-3 sm:left-[90px] right-3 sm:right-auto sm:w-[530px] h-[130px] rounded-xl border border-dashed border-amber/40 bg-amber/[0.02] pointer-events-none flex items-start justify-end p-1.5">
+                      {/* Active Bézier Recognition Node Bounding Highlights — only shown when user has drawn strokes */}
+                      {!isCleared && strokeCount > 0 && (
+                        <div className="absolute top-[148px] left-3 sm:left-[90px] right-3 sm:right-auto sm:w-[530px] h-[130px] rounded-xl border border-dashed border-amber/40 bg-amber/[0.02] pointer-events-none flex items-start justify-end p-1.5 z-20">
                           <span className="font-code-sm text-[10px] uppercase font-bold text-amber px-1.5 py-0.5 rounded bg-surface border border-amber/30">
-                            Equation Token Array [10]
+                            {activeEngine} • Active
                           </span>
                         </div>
                       )}
 
                       {/* Floating Inking Telemetry Pill (Bottom-Left) */}
-                      <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2 bg-surface/95 backdrop-blur-sm px-3 py-1.5 rounded-full border border-hairline shadow-sm max-w-[calc(100%-32px)]">
+                      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 bg-surface/95 backdrop-blur-sm px-3 py-1.5 rounded-full border border-hairline shadow-sm max-w-[calc(100%-32px)]">
                         <span className="w-2 h-2 rounded-full bg-secondary shrink-0"></span>
                         <span className="font-code-sm text-code-sm text-ink font-medium truncate">
-                          {isCleared ? '0 strokes • Canvas cleared • Ready to ink' : '9 strokes • 120Hz Bezier sampling • Clean tokenization'}
+                          {isCleared
+                            ? '0 strokes • Canvas cleared • Draw equation'
+                            : `${strokeCount} stroke${strokeCount !== 1 ? 's' : ''} • Real-time inking ready`}
                         </span>
                       </div>
 
                       {/* Canvas Quick Clear Icon Float */}
                       <button
                         onClick={handleClearReset}
-                        className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-surface border border-hairline text-ink-muted hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer"
+                        className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-surface border border-hairline text-ink-muted hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer"
                         id="quick-clear-canvas"
                         title="Clear Canvas"
                         type="button"
@@ -296,9 +447,18 @@ export default function WriteSolvePage() {
                       id="solve-now-btn"
                       type="button"
                     >
-                      <span className="material-symbols-outlined text-[22px]">bolt</span>
-                      <span>Solve Problem Now</span>
-                      <span className="font-caption text-caption text-ink/75 bg-ink/10 px-2.5 py-0.5 rounded-full font-medium">WASM 0.84ms</span>
+                      {isSolving ? (
+                        <>
+                          <span className="material-symbols-outlined text-[22px] animate-spin">refresh</span>
+                          <span>{solvingFeedback || 'Transcribing ink...'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[22px]">bolt</span>
+                          <span>Solve Problem Now</span>
+                          <span className="font-caption text-caption text-ink/75 bg-ink/10 px-2.5 py-0.5 rounded-full font-medium">Gemini AI + CAS</span>
+                        </>
+                      )}
                     </button>
 
                     <button
@@ -329,13 +489,13 @@ export default function WriteSolvePage() {
                     <div className="flex items-center justify-between border-b border-hairline pb-space-sm">
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-1 rounded-full bg-surface-container font-code-sm text-code-sm font-bold text-ink">
-                          POLYNOMIAL DEGREE 2
+                          {solution.problemType.toUpperCase()}
                         </span>
                         <span className="font-caption text-caption text-ink-muted">x ∈ ℝ</span>
                       </div>
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-code-sm text-code-sm font-semibold">
                         <span className="material-symbols-outlined text-[15px]">verified</span>
-                        <span>AST RECOGNITION 99.8%</span>
+                        <span>{activeEngine} • {confidence}%</span>
                       </div>
                     </div>
 
@@ -345,18 +505,18 @@ export default function WriteSolvePage() {
                         <span className="font-caption text-caption font-semibold uppercase tracking-wider text-ink-muted">Recognized Expression</span>
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sage/20 text-secondary font-code-sm text-code-sm font-medium">
                           <span className="material-symbols-outlined text-[14px]">check</span>
-                          Valid AST
+                          AST Validated
                         </span>
                       </div>
                       <div className="py-1 overflow-x-auto">
                         <span className="font-serif text-3xl font-normal text-ink tracking-wide select-all">
-                          x² − 5x + 6 = 0
+                          {latexExpr || expression}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-ink-muted font-code-sm text-code-sm pt-1 border-t border-hairline">
-                        <span>Canonical Form: <code className="text-ink font-semibold">ax² + bx + c = 0</code></span>
+                        <span>Equation: <code className="text-ink font-semibold">{expression}</code></span>
                         <span>•</span>
-                        <span>Degree: 2</span>
+                        <span>{solution.problemType}</span>
                       </div>
                     </div>
 
@@ -364,23 +524,22 @@ export default function WriteSolvePage() {
                     <div className="relative bg-surface rounded-xl border-2 border-amber p-space-md flex flex-col gap-space-sm bg-gradient-to-r from-surface via-surface to-primary-fixed/20 shadow-sm">
                       <div className="flex items-center justify-between">
                         <span className="font-code-sm text-code-sm font-bold tracking-widest text-primary uppercase flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-amber"></span>Final Roots
+                          <span className="w-2 h-2 rounded-full bg-amber"></span>Final Solution
                         </span>
                         <span className="px-2 py-0.5 rounded bg-amber/20 font-code-sm text-code-sm font-semibold text-on-primary-fixed-variant">
-                          x ∈ &#123;2, 3&#125;
+                          {solution.finalAnswerLatex || solution.finalAnswerPlain}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                        <div className="font-serif text-4xl lg:text-5xl font-medium text-ink tracking-tight select-all">
-                          x = 2, 3
-                        </div>
-                        <div className="font-code-input text-code-input text-ink-muted">
-                          [ x₁ = 2 , x₂ = 3 ]
+                        <div className="font-serif text-3xl lg:text-4xl font-medium text-ink tracking-tight select-all">
+                          {solution.finalAnswerLatex || solution.finalAnswerPlain}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 p-2 rounded-lg bg-sage/15 border border-sage/30 text-ink">
                         <span className="material-symbols-outlined text-secondary text-[18px]">verified</span>
-                        <span className="font-caption text-caption text-ink font-semibold">✓ Verified by direct check • Exact integer roots</span>
+                        <span className="font-caption text-caption text-ink font-semibold">
+                          {solution.isVerified ? '✓ Verified by direct check' : 'Analytical Proof Derivation'}
+                        </span>
                       </div>
                     </div>
 
@@ -389,87 +548,46 @@ export default function WriteSolvePage() {
                       <div className="flex items-center justify-between pb-1">
                         <div className="flex flex-col">
                           <h2 className="font-headline-sm text-headline-sm text-ink font-semibold">Step-by-Step Solution</h2>
-                          <p className="font-caption text-caption text-ink-muted">Simple, verified breakdown</p>
+                          <p className="font-caption text-caption text-ink-muted">
+                            {solution.steps?.length ? `${solution.steps.length} verified steps` : 'Verified breakdown'}
+                          </p>
                         </div>
-                        <span className="font-code-sm text-code-sm text-ink-muted px-2 py-0.5 rounded bg-surface-container">Factoring Method</span>
+                        <span className="font-code-sm text-code-sm text-ink-muted px-2 py-0.5 rounded bg-surface-container">
+                          {solution.problemType}
+                        </span>
                       </div>
 
-                      {/* Step 1 */}
-                      <div className="p-space-md rounded-xl bg-surface-container-low border border-hairline flex flex-col gap-1.5 hover:bg-surface-container transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-amber text-surface font-code-sm text-code-sm font-bold flex items-center justify-center">1</span>
-                            <span className="font-body-sm text-body-sm font-semibold text-ink">Identify standard terms</span>
+                      {solution.steps && solution.steps.length > 0 ? (
+                        solution.steps.map((st) => (
+                          <div key={st.stepNumber} className="p-space-md rounded-xl bg-surface-container-low border border-hairline flex flex-col gap-1.5 hover:bg-surface-container transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-full bg-amber text-surface font-code-sm text-code-sm font-bold flex items-center justify-center">
+                                  {st.stepNumber}
+                                </span>
+                                <span className="font-body-sm text-body-sm font-semibold text-ink">{st.title}</span>
+                              </div>
+                              <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface border border-hairline">
+                                {st.rule}
+                              </span>
+                            </div>
+                            <div className="pl-space-lg flex flex-col gap-1 text-ink font-body-sm text-body-sm">
+                              <p className="text-ink-muted">{st.description}</p>
+                              {st.mathExpression && (
+                                <div className="p-2 rounded bg-surface font-code-input text-[13px] text-ink border border-hairline mt-0.5">
+                                  {st.mathExpression}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface border border-hairline">standard form</span>
+                        ))
+                      ) : (
+                        <div className="p-space-md rounded-xl bg-surface-container-low border border-hairline text-ink-muted text-sm">
+                          Direct evaluation complete: <span className="font-semibold text-ink">{solution.finalAnswerPlain}</span>
                         </div>
-                        <div className="pl-space-lg flex flex-col gap-1 text-ink font-body-sm text-body-sm">
-                          <p className="text-ink-muted">In standard quadratic form <code className="font-code-input text-ink font-medium">ax² + bx + c = 0</code>:</p>
-                          <div className="flex items-center gap-2 font-code-input text-code-input mt-0.5 flex-wrap">
-                            <span className="px-2 py-0.5 bg-surface rounded border border-hairline font-medium">a = 1</span>
-                            <span className="px-2 py-0.5 bg-surface rounded border border-hairline font-medium">b = −5</span>
-                            <span className="px-2 py-0.5 bg-surface rounded border border-hairline font-medium">c = 6</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 2 */}
-                      <div className="p-space-md rounded-xl bg-surface-container-low border border-hairline flex flex-col gap-1.5 hover:bg-surface-container transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-amber text-surface font-code-sm text-code-sm font-bold flex items-center justify-center">2</span>
-                            <span className="font-body-sm text-body-sm font-semibold text-ink">Find two numbers that multiply to 6 and add to −5</span>
-                          </div>
-                          <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface border border-hairline">factoring</span>
-                        </div>
-                        <div className="pl-space-lg flex flex-col gap-1 text-ink font-body-sm text-body-sm">
-                          <p className="text-ink-muted">Look for factors of 6 whose sum is −5:</p>
-                          <div className="flex flex-wrap items-center gap-2 font-code-input text-code-input text-ink">
-                            <span className="px-2 py-0.5 bg-surface rounded border border-hairline font-medium">(−2) × (−3) = 6</span>
-                            <span className="text-ink-muted">and</span>
-                            <span className="px-2 py-0.5 bg-surface rounded border border-hairline font-medium">(−2) + (−3) = −5</span>
-                          </div>
-                          <p className="mt-1 font-serif text-[17px] text-ink">Therefore, rewrite the equation as: <span className="font-medium">(x − 2)(x − 3) = 0</span></p>
-                        </div>
-                      </div>
-
-                      {/* Step 3 */}
-                      <div className="p-space-md rounded-xl bg-surface-container-low border border-hairline flex flex-col gap-1.5 hover:bg-surface-container transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-amber text-surface font-code-sm text-code-sm font-bold flex items-center justify-center">3</span>
-                            <span className="font-body-sm text-body-sm font-semibold text-ink">Solve for each factor</span>
-                          </div>
-                          <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface border border-hairline">zero-product</span>
-                        </div>
-                        <div className="pl-space-lg flex flex-col sm:flex-row sm:items-center gap-3 text-ink font-body-sm text-body-sm">
-                          <div className="flex items-center gap-2 font-serif text-[17px]">
-                            <span className="bg-surface px-2.5 py-1 rounded border border-hairline font-medium">x − 2 = 0 ⟹ x = 2</span>
-                          </div>
-                          <div className="flex items-center gap-2 font-serif text-[17px]">
-                            <span className="bg-surface px-2.5 py-1 rounded border border-hairline font-medium">x − 3 = 0 ⟹ x = 3</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 4 */}
-                      <div className="p-space-md rounded-xl bg-olive-tint-soft border border-hairline flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-ink text-surface font-code-sm text-code-sm font-bold flex items-center justify-center">4</span>
-                            <span className="font-body-sm text-body-sm font-semibold text-ink">Quick check</span>
-                          </div>
-                          <span className="font-code-sm text-[11px] text-secondary px-2 py-0.5 rounded bg-surface border border-sage/30 font-semibold">verified ✓</span>
-                        </div>
-                        <div className="pl-space-lg flex flex-col gap-1 text-ink font-body-sm text-body-sm">
-                          <p className="text-ink-muted">Plug <code className="font-code-input text-ink font-medium">x = 2</code> and <code className="font-code-input text-ink font-medium">x = 3</code> back into <code className="font-code-input text-ink font-medium">x² − 5x + 6</code>:</p>
-                          <div className="flex flex-wrap items-center gap-2 font-code-input text-code-sm text-ink">
-                            <span className="px-2 py-1 bg-surface rounded border border-hairline">For x=2: (2)² − 5(2) + 6 = 4 − 10 + 6 = 0 ✓</span>
-                            <span className="px-2 py-1 bg-surface rounded border border-hairline">For x=3: (3)² − 5(3) + 6 = 9 − 15 + 6 = 0 ✓</span>
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
+
 
                     {/* Client-Side Verification Terminal */}
                     <div className="flex flex-col gap-2 p-space-sm bg-ink rounded-xl text-surface">

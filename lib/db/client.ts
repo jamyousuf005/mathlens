@@ -29,7 +29,6 @@ interface MongoCache {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var _mongoCache: MongoCache | undefined;
 }
 
@@ -38,14 +37,16 @@ function getDatabaseInstance(): MongoCache {
     return global._mongoCache;
   }
 
-  const client = new MongoClient(connectionUri);
+  const client = new MongoClient(connectionUri, {
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+  });
   // Synchronous client instance, driver connects automatically on first command
   const db = client.db('mathlens');
   const instance = { client, db };
 
-  if (process.env.NODE_ENV !== 'production') {
-    global._mongoCache = instance;
-  }
+  // Cache globally across all environments (including serverless lambda cold starts)
+  global._mongoCache = instance;
 
   return instance;
 }
