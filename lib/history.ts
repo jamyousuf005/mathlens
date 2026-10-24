@@ -94,6 +94,38 @@ export async function saveHistory(input: NewHistoryItem): Promise<HistoryItem> {
     await Promise.all(excess.map((item) => requestResult(store.delete(item.id))));
   }
 
+  // Cloud sync to MongoDB (if user is authenticated)
+  try {
+    fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inputType: record.inputType,
+        recognizedText: record.recognizedText,
+        finalExpression: record.expression,
+        latex: record.latex,
+        problemType: record.problemType,
+        finalAnswerPlain: record.finalAnswerPlain,
+        finalAnswerLatex: record.finalAnswerLatex,
+        answer: {
+          exact: [record.finalAnswerPlain],
+          verified: record.isVerified,
+        },
+        steps: record.steps.map((s) => ({
+          rule: s.rule || 'Math Rule',
+          description: s.description || '',
+          before: s.mathExpression || '',
+          after: s.mathExpression || '',
+        })),
+        favorite: record.favorite,
+      }),
+    }).catch(() => {
+      // Offline or guest mode: local IndexedDB persists seamlessly
+    });
+  } catch {
+    // Suppress network errors for guest users
+  }
+
   return record;
 }
 
@@ -107,6 +139,13 @@ export async function clearHistory(): Promise<void> {
   const db = await openDatabase();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
   await requestResult(transaction.objectStore(STORE_NAME).clear());
+
+  // Also clear remote cloud history if authenticated
+  try {
+    fetch('/api/history', { method: 'DELETE' }).catch(() => {});
+  } catch {
+    // Guest fallback
+  }
 }
 
 export async function setHistoryFavorite(id: string, favorite: boolean): Promise<void> {

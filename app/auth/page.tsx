@@ -197,40 +197,17 @@ export default function AuthPage() {
       {/* Main Content Area */}
       <main className="w-full flex-1 flex items-center justify-center px-4 sm:px-6 py-8 md:py-12">
         <div className="w-full max-w-7xl mx-auto">
-          {/* Engine Status Pill & Sub-Navigation Header */}
-          <div className="flex items-center justify-between pb-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#1E231D]/10 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#97A87A] animate-pulse" />
-              <span className="font-mono text-xs text-[#1E231D] font-medium tracking-tight">
-                Deterministic Engine Ready (CAS-v1.0)
-              </span>
-            </div>
-            <div className="hidden sm:flex items-center gap-3 text-xs text-[#1E231D]/60 font-medium">
-              <span>Client-Side Sandbox</span>
-              <span className="w-1 h-1 rounded-full bg-[#1E231D]/20" />
-              <span>AI OCR, local solver</span>
-            </div>
-          </div>
 
           {/* 2-Column Academic Workstation Frame */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start">
-            {/* COLUMN 1 (On desktop: Left side | On mobile: Appears below auth form via order-2 lg:order-1) */}
-            <div className="order-2 lg:order-1 lg:col-span-6 flex flex-col gap-5 sm:gap-6">
-              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 flex flex-col justify-between relative overflow-hidden">
-                {/* Top Tag & Monospaced Index */}
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] sm:text-xs text-[#1E231D]/60 uppercase tracking-wider">
-                    FIG 1.0 • OPTICAL CAS PIPELINE
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-[#FCF9EA] border border-[#1E231D]/10 font-mono text-[10px] sm:text-xs text-[#1E231D] font-semibold">
-                    Local CAS + history
-                  </span>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-stretch">
+            {/* COLUMN 1 (On mobile: Appears FIRST via order-1 | On desktop: Left side via lg:order-1) */}
+            <div className="order-1 lg:order-1 lg:col-span-6 flex flex-col h-full">
+              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 flex flex-col justify-between h-full relative overflow-hidden">
 
-                {/* Central Visual Composition: Golden Ratio Compass & Transformation */}
-                <div className="my-6 flex flex-col items-center justify-center relative">
-                  <div className="relative w-full max-w-[340px] h-48 flex items-center justify-center">
-                    <svg className="w-full h-full text-[#1E231D]" fill="none" viewBox="0 0 340 190">
+                {/* Central Visual Composition: Golden Ratio Compass */}
+                <div className="my-2 sm:my-6 flex flex-col items-center justify-center relative w-full">
+                  <div className="relative w-full max-w-[480px] aspect-[340/190] flex items-center justify-center">
+                    <svg className="w-full h-full text-[#1E231D] overflow-visible" fill="none" viewBox="50 15 240 160">
                       <rect height="140" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" width="200" x="70" y="25" />
                       <rect height="140" stroke="currentColor" strokeDasharray="3 3" strokeOpacity="0.12" strokeWidth="1" width="124" x="70" y="25" />
                       <rect height="76" stroke="currentColor" strokeDasharray="3 3" strokeOpacity="0.12" strokeWidth="1" width="76" x="194" y="25" />
@@ -248,8 +225,8 @@ export default function AuthPage() {
                     </svg>
                   </div>
 
-                  {/* Transformation Card: Handwritten -> LaTeX Engine */}
-                  <div className="w-full bg-[#FCF9EA] rounded-xl p-4 border border-[#1E231D]/10 shadow-sm mt-2 flex flex-col md:flex-row items-center justify-between gap-3">
+                  {/* Transformation Card: Handwritten -> LaTeX Engine (Hidden on mobile) */}
+                  <div className="hidden lg:flex w-full bg-[#FCF9EA] rounded-xl p-4 border border-[#1E231D]/10 shadow-sm mt-2 flex-col md:flex-row items-center justify-between gap-3">
                     <div className="flex-1 w-full bg-white rounded-lg p-3 border border-[#1E231D]/10">
                       <span className="text-[11px] font-medium text-[#1E231D]/60 block mb-1">OCR Handwrite Track</span>
                       <div className="flex items-center gap-2">
@@ -280,8 +257,8 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                {/* Feature Triad Badges */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 bg-[#FCF9EA]/50 rounded-xl p-3 border border-[#1E231D]/5">
+                {/* Feature Triad Badges (Hidden on mobile) */}
+                <div className="hidden lg:grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 bg-[#FCF9EA]/50 rounded-xl p-3 border border-[#1E231D]/5">
                   <div className="flex items-start gap-2.5 p-2 rounded-lg bg-white border border-[#1E231D]/5 shadow-sm">
                     <div className="w-7 h-7 rounded-full bg-[#FCF9EA] flex items-center justify-center shrink-0 text-[#1E231D]">
                       <Cpu className="w-4 h-4 text-[#89511A]" />
@@ -314,18 +291,12 @@ export default function AuthPage() {
                 </div>
               </div>
 
-              {/* Academic Citation Footer Note */}
-              <div className="bg-[#DFE4DA]/40 rounded-xl p-4 flex items-center gap-3 border border-[#1E231D]/5">
-                <BookOpen className="w-5 h-5 text-[#1E231D]/70 shrink-0" />
-                <p className="text-xs text-[#1E231D]/70 leading-relaxed">
-                  Designed for researchers, educators, and students. Uses standard mathematical notation and exact rational arithmetic.
-                </p>
-              </div>
+
             </div>
 
-            {/* COLUMN 2: Unified Auth Card (On mobile: Appears FIRST via order-1 lg:order-2) */}
-            <div className="order-1 lg:order-2 lg:col-span-6 flex flex-col">
-              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 relative">
+            {/* COLUMN 2: Unified Auth Card (On mobile: Appears below Column 1 via order-2 | On desktop: Right side via lg:order-2) */}
+            <div className="order-2 lg:order-2 lg:col-span-6 flex flex-col h-full">
+              <div className="bg-white rounded-2xl p-5 sm:p-8 shadow-sm border border-[#1E231D]/10 relative flex flex-col justify-between h-full">
                 {/* Dynamic Header Description */}
                 <div className="mb-5 sm:mb-6">
                   <h1 className="text-xl sm:text-2xl font-bold text-[#1E231D] tracking-tight">
@@ -513,21 +484,14 @@ export default function AuthPage() {
                 )}
 
                 {/* Card Base: Guest Sandbox Mode & Telemetry Guarantee */}
-                <div className="mt-6 pt-4 border-t border-[#1E231D]/5 flex flex-col gap-3">
+                <div className="mt-3 pt-4 border-t border-[#1E231D]/5 flex flex-col gap-3">
                   <Link
                     href="/solve/capture"
-                    className="w-full py-2.5 px-4 rounded-full bg-[#EBEFE6] hover:bg-[#E5EAE0] transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 text-[#1E231D] text-center"
+                    className="w-full p-4 rounded-full bg-[#EBEFE6] hover:bg-[#E5EAE0] transition-colors flex flex-col sm:flex-row items-center justify-center gap-1.5 text-[#1E231D] text-center"
                   >
                     <span className="text-xs font-semibold">Continue as Guest (Local Sandbox Mode)</span>
-                    <span className="text-[#1E231D]/60 text-[11px]">— Zero sync, solves client-side</span>
                   </Link>
 
-                  <div className="flex items-center justify-center gap-1.5 pt-1 text-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#97A87A]" />
-                    <span className="text-[11px] text-[#1E231D]/60">
-                      No account needed | History stored on this device
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>

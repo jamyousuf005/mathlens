@@ -68,21 +68,46 @@ export function ExpressionEditor({
     });
   };
 
+  const hasLowConfidenceHints = /[?_~]/i.test(value);
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          // Notify user of clipboard paste event
+          const event = new CustomEvent('mathlens:clipboard-image', { detail: { file } });
+          window.dispatchEvent(event);
+        }
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
-      <textarea
-        id={inputId}
-        ref={inputRef}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        autoFocus={autoFocus}
-        rows={2}
-        spellCheck={false}
-        disabled={disabled}
-        className="w-full resize-none rounded-lg border border-hairline bg-surface px-3 py-2 font-code-input text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber disabled:opacity-60"
-        placeholder="Example: x^2 - 5x + 6 = 0"
-        aria-label="Expression to solve"
-      />
+      <div className="relative">
+        <textarea
+          id={inputId}
+          ref={inputRef}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onPaste={handlePaste}
+          autoFocus={autoFocus}
+          rows={2}
+          spellCheck={false}
+          disabled={disabled}
+          className="w-full resize-none rounded-lg border border-hairline bg-surface px-3 py-2 font-code-input text-sm text-ink focus:outline-none focus:ring-2 focus:ring-amber disabled:opacity-60"
+          placeholder="Example: x^2 - 5x + 6 = 0 (Supports typing or pasting images via Ctrl+V)"
+          aria-label="Expression to solve"
+        />
+        {hasLowConfidenceHints && (
+          <div className="mt-1 flex items-center gap-1.5 rounded-md bg-amber/15 px-2.5 py-1 text-xs text-[#89511A] border border-amber/30">
+            <span className="font-semibold">Note:</span> Ambiguous symbols detected. Verify highlighted characters before solving.
+          </div>
+        )}
+      </div>
       <MathKeyboard onInsert={insertAtCursor} onBackspace={backspaceAtCursor} />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p

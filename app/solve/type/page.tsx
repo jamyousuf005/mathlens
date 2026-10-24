@@ -19,6 +19,36 @@ export default function TypeSolvePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requestedExpression = params.get('expr');
+    const historyParam = params.get('historyId');
+
+    if (historyParam) {
+      import('@/lib/history').then(({ listHistory }) => {
+        listHistory().then((items) => {
+          const match = items.find((i) => i.id === historyParam);
+          if (match) {
+            setExpression(match.expression);
+            setHistoryId(match.id);
+            setIsFavorite(match.favorite);
+            setSolution({
+              success: true,
+              problemType: match.problemType as any,
+              normalizedExpression: match.expression,
+              latexExpression: match.latex,
+              finalAnswerPlain: match.finalAnswerPlain,
+              finalAnswerLatex: match.finalAnswerLatex,
+              exactAnswer: match.finalAnswerPlain,
+              steps: match.steps,
+              isVerified: match.isVerified,
+              verificationDetails: { lhsValue: 0, rhsValue: 0, residualNorm: 0, status: 'Restored from History' },
+              executionTimeMs: 0,
+            });
+            setHistoryMessage('Restored precomputed solution from Notebook without recomputing.');
+          }
+        });
+      });
+      return;
+    }
+
     if (!requestedExpression) return;
 
     const timeout = window.setTimeout(() => setExpression(requestedExpression), 0);

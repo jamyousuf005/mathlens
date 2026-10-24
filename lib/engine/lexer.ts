@@ -70,8 +70,23 @@ export function tokenize(input: string): Token[] {
       case '^':
         tokens.push({ type: 'POWER', value: '^', position: i });
         break;
+      case '!':
+        tokens.push({ type: 'FACTORIAL', value: '!', position: i });
+        break;
+      case '%':
+        tokens.push({ type: 'PERCENT', value: '%', position: i });
+        break;
       case '=':
         tokens.push({ type: 'EQUALS', value: '=', position: i });
+        break;
+      case ',':
+        tokens.push({ type: 'COMMA', value: ',', position: i });
+        break;
+      case ';':
+        tokens.push({ type: 'SEMICOLON', value: ';', position: i });
+        break;
+      case '|':
+        tokens.push({ type: 'PIPE', value: '|', position: i });
         break;
       case '(':
         tokens.push({ type: 'LPAREN', value: '(', position: i });

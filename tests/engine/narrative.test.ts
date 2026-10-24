@@ -10,7 +10,8 @@ describe('Complete Solution Narrative Generator', () => {
     const narrative = generateCompleteNarrative(solution, 'x^2 - 5x + 6 = 0');
     expect(narrative.problemType).toBe('Quadratic Equation');
     expect(narrative.fullPlainText).toContain('x^2 - 5x + 6 = 0');
-    expect(narrative.fullPlainText).toContain('x_1 = 3');
+    expect(narrative.fullPlainText).toContain('x_1 = 2');
+    expect(narrative.fullPlainText).toContain('x_2 = 3');
     expect(narrative.fullPlainText).not.toContain('Step 1');
     expect(narrative.fullPlainText).not.toContain('Problem:');
     expect(narrative.sections.length).toBeGreaterThanOrEqual(2);

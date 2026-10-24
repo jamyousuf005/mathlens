@@ -11,9 +11,14 @@ export type TokenType =
   | 'MULTIPLY'
   | 'DIVIDE'
   | 'POWER'
+  | 'FACTORIAL'
+  | 'PERCENT'
   | 'EQUALS'
+  | 'COMMA'
+  | 'SEMICOLON'
   | 'LPAREN'
   | 'RPAREN'
+  | 'PIPE'
   | 'EOF';
 
 export interface Token {
@@ -27,6 +32,8 @@ export type ASTNode =
   | IdentifierNode
   | UnaryOpNode
   | BinaryOpNode
+  | PostfixOpNode
+  | FunctionCallNode
   | EquationNode;
 
 export interface NumberNode {
@@ -43,6 +50,18 @@ export interface IdentifierNode {
 export interface UnaryOpNode {
   type: 'UnaryOp';
   operator: '+' | '-';
+  argument: ASTNode;
+}
+
+export interface PostfixOpNode {
+  type: 'PostfixOp';
+  operator: '!' | '%';
+  argument: ASTNode;
+}
+
+export interface FunctionCallNode {
+  type: 'FunctionCall';
+  name: 'sqrt' | 'abs' | 'sin' | 'cos' | 'tan' | 'log' | 'ln';
   argument: ASTNode;
 }
 
@@ -69,11 +88,20 @@ export interface SolutionStep {
 
 export interface SolutionResult {
   success: boolean;
-  problemType: 'Quadratic Equation' | 'Linear Equation' | 'Arithmetic' | 'Algebraic Simplification' | 'Algebraic Identity / Factoring' | 'Unsupported';
+  problemType:
+    | 'Quadratic Equation'
+    | 'Linear Equation'
+    | 'System of Linear Equations'
+    | 'Arithmetic'
+    | 'Algebraic Simplification'
+    | 'Algebraic Identity / Factoring'
+    | 'Unsupported';
   normalizedExpression: string;
   latexExpression: string;
   finalAnswerLatex: string;
   finalAnswerPlain: string;
+  exactAnswer?: string;
+  decimalAnswer?: number | number[];
   roots?: number[];
   steps: SolutionStep[];
   isVerified: boolean;

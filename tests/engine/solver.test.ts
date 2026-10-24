@@ -43,8 +43,8 @@ describe('arithmetic', () => {
 });
 
 describe('validation', () => {
-  it.each(['2++3', '2+3)', '(2+3', '1.2.3', '5!', '|−3|', '50%', '2*'])(
-    'rejects malformed or unsupported input %s',
+  it.each(['2++3', '2+3)', '(2+3', '1.2.3', '2*'])(
+    'rejects malformed syntax %s',
     (input) => {
       const result = solve(input);
       expect(result.success).toBe(false);
@@ -52,10 +52,28 @@ describe('validation', () => {
       expect(result.error).toBeTruthy();
     }
   );
+
+  it('correctly evaluates previously missing Tier 1 operations: factorial, abs, percent, and sqrt', () => {
+    expect(solve('5!').finalAnswerPlain).toBe('120');
+    expect(solve('|−3|').finalAnswerPlain).toBe('3');
+    expect(solve('50%').finalAnswerPlain).toBe('1/2');
+    expect(solve('sqrt(9)').finalAnswerPlain).toBe('3');
+  });
 });
 
 describe('equations', () => {
-  it('rejects multivariate equations instead of dropping variables', () => {
+  it('solves 2-variable linear systems and rejects 3-variable systems without throwing uncaught errors', () => {
+    const system = solve('2x+y=5, x-y=1');
+    expect(system.success).toBe(true);
+    expect(system.problemType).toBe('System of Linear Equations');
+    expect(system.finalAnswerPlain).toBe('x = 2, y = 1');
+    expect(system.isVerified).toBe(true);
+
+    const threeVar = solve('x+y+z=6, 2x-y=3');
+    expect(threeVar.success).toBe(false);
+  });
+
+  it('rejects multivariate single equations instead of dropping variables', () => {
     for (const input of ['2x+y=3', 'x^2+y=0']) {
       const result = solve(input);
       expect(result.success).toBe(false);
@@ -162,8 +180,8 @@ describe('edge cases', () => {
   it('rejects irrational powers and unsupported functions clearly', () => {
     expect(solve('2^0.5').success).toBe(false);
     expect(solve('2^0.5').error).toMatch(/integer exponents/i);
-    expect(solve('sqrt(9)').success).toBe(false);
-    expect(solve('sqrt(9)').error).toMatch(/unsupported/i);
+    expect(solve('det(1)').success).toBe(false);
+    expect(solve('det(1)').error).toMatch(/unsupported/i);
   });
 
   it('reports identity and contradictory equations', () => {

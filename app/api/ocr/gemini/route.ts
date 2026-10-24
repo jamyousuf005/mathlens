@@ -19,8 +19,20 @@ const GeminiOcrResultSchema = z.object({
   confidence: z.number().min(0).max(1).optional(),
 });
 
+import { checkRateLimit } from '@/lib/rate-limit';
+
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    // Protect OCR quota: max 30 OCR requests per minute per IP
+    const rate = checkRateLimit(`ocr:${ip}`, 30, 60_000);
+    if (!rate.success) {
+      return NextResponse.json(
+        { error: 'Too many OCR requests. Please slow down and try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(rate.reset) } }
+      );
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(

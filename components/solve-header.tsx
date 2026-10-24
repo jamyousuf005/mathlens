@@ -93,6 +93,8 @@ export default function SolveHeader() {
           </div>
         </div>
 
+
+
         {/* Desktop Navigation Pill Switcher */}
         <nav className="hidden md:flex items-center gap-1 p-1 rounded-full bg-surface-container-low border border-hairline">
           {navLinks.map((link) => (
@@ -154,10 +156,30 @@ export default function SolveHeader() {
                 </Link>
                 <button
                   onClick={handleSignOut}
-                  className="w-full text-left px-3 py-1.5 text-xs text-error hover:bg-error-container/40 flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-surface-container flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[15px]">logout</span>
                   Sign Out
+                </button>
+                <div className="my-1 border-t border-hairline"></div>
+                <button
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to delete your account? All saved solutions and history will be permanently erased.')) {
+                      try {
+                        const res = await fetch('/api/user/account', { method: 'DELETE' });
+                        if (res.ok) {
+                          await authClient.signOut();
+                          router.push('/');
+                        }
+                      } catch (err) {
+                        console.error('Failed to delete account:', err);
+                      }
+                    }
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-error hover:bg-error-container/40 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[15px]">delete_forever</span>
+                  Delete Account
                 </button>
               </div>
             )}

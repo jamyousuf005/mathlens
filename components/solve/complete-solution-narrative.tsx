@@ -1,6 +1,13 @@
-'use client';
-
 import React, { useState, useMemo } from 'react';
+import {
+  BookOpen,
+  ChevronsUpDown,
+  Share2,
+  Copy,
+  Check,
+  Download,
+  CheckCircle2,
+} from 'lucide-react';
 import type { SolutionResult } from '@/lib/engine/types';
 import { generateCompleteNarrative } from '@/lib/engine/narrative';
 import { MathRenderer } from '@/components/ui/MathRenderer';
@@ -50,17 +57,32 @@ export function CompleteSolutionNarrative({
     return null;
   }
 
+  const [stepsCollapsed, setStepsCollapsed] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleShareLink = async () => {
+    try {
+      const expr = encodeURIComponent(solution.normalizedExpression || originalProblem || '');
+      const url = `${window.location.origin}/solve/type?expr=${expr}`;
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
+
   return (
     <section
       id={`${idPrefix}-container`}
-      className={`rounded-2xl border border-hairline bg-surface p-space-md sm:p-space-lg shadow-card flex flex-col gap-space-md transition-all ${className}`}
+      className={`rounded-2xl border border-hairline bg-surface p-4 sm:p-6 shadow-card flex flex-col gap-4 transition-all ${className}`}
       aria-label="Complete Written Solution"
     >
-      {/* Component Header Ribbon */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-hairline pb-3">
-        <div className="flex items-start sm:items-center gap-3 min-w-0">
+      {/* Component Header Ribbon: Dedicated Title Row */}
+      <div className="flex flex-col gap-3 border-b border-hairline pb-4">
+        <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber/15 text-amber flex items-center justify-center shrink-0 border border-amber/30">
-            <span className="material-symbols-outlined text-[22px]">auto_stories</span>
+            <BookOpen className="w-5 h-5 text-amber" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -77,15 +99,15 @@ export function CompleteSolutionNarrative({
           </div>
         </div>
 
-        {/* Action Controls & Format Switcher */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0 self-start sm:self-auto pt-1 sm:pt-0">
+        {/* Action Controls & Format Switcher: Dedicated Clean Row */}
+        <div className="flex items-center gap-2 flex-wrap pt-1">
           {/* View Tab Buttons */}
           <div className="inline-flex items-center p-0.5 rounded-lg bg-surface-container-low border border-hairline shrink-0">
             <button
               type="button"
               id={`${idPrefix}-tab-article`}
               onClick={() => setActiveTab('article')}
-              className={`px-3 py-1 rounded-md font-code-sm text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md font-code-sm text-xs font-medium transition-colors cursor-pointer ${
                 activeTab === 'article'
                   ? 'bg-surface text-ink shadow-xs font-semibold'
                   : 'text-ink-muted hover:text-ink'
@@ -97,7 +119,7 @@ export function CompleteSolutionNarrative({
               type="button"
               id={`${idPrefix}-tab-raw`}
               onClick={() => setActiveTab('raw')}
-              className={`px-3 py-1 rounded-md font-code-sm text-xs font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md font-code-sm text-xs font-medium transition-colors cursor-pointer ${
                 activeTab === 'raw'
                   ? 'bg-surface text-ink shadow-xs font-semibold'
                   : 'text-ink-muted hover:text-ink'
@@ -109,17 +131,45 @@ export function CompleteSolutionNarrative({
 
           <div className="h-5 w-px bg-hairline hidden sm:block"></div>
 
+          {/* Toggle Steps Collapse */}
+          <button
+            type="button"
+            onClick={() => setStepsCollapsed(!stepsCollapsed)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hairline bg-surface hover:bg-surface-container text-ink font-body-sm text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            title={stepsCollapsed ? 'Expand all steps' : 'Collapse all steps'}
+          >
+            <ChevronsUpDown className="w-3.5 h-3.5 text-ink-muted shrink-0" />
+            <span>{stepsCollapsed ? 'Expand Steps' : 'Collapse Steps'}</span>
+          </button>
+
+          {/* Share Solution Link */}
+          <button
+            type="button"
+            onClick={handleShareLink}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber/40 bg-amber/10 hover:bg-amber/20 text-[#89511A] font-body-sm text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            title="Copy shareable solution link"
+          >
+            {copiedLink ? (
+              <Check className="w-3.5 h-3.5 text-secondary shrink-0" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5 text-amber shrink-0" />
+            )}
+            <span>{copiedLink ? 'Link Copied!' : 'Share Link'}</span>
+          </button>
+
           {/* Copy Full Text Button */}
           <button
             type="button"
             id={`${idPrefix}-btn-copy-text`}
             onClick={handleCopyText}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber text-ink font-body-sm text-xs font-semibold shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber text-ink font-body-sm text-xs font-semibold shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
             title="Copy entire answer to clipboard"
           >
-            <span className="material-symbols-outlined text-[15px]">
-              {copiedText ? 'check' : 'content_copy'}
-            </span>
+            {copiedText ? (
+              <Check className="w-3.5 h-3.5 text-ink shrink-0" />
+            ) : (
+              <Copy className="w-3.5 h-3.5 text-ink shrink-0" />
+            )}
             <span>{copiedText ? 'Copied!' : 'Copy Full Text'}</span>
           </button>
 
@@ -132,7 +182,7 @@ export function CompleteSolutionNarrative({
             title="Download solution as .txt"
             aria-label="Download as text file"
           >
-            <span className="material-symbols-outlined text-[17px]">download</span>
+            <Download className="w-4 h-4 text-ink" />
           </button>
         </div>
       </div>
@@ -152,34 +202,36 @@ export function CompleteSolutionNarrative({
           </div>
 
           {/* Flow of Pure Mathematical Step Equations */}
-          <div className="flex flex-col gap-space-sm pl-2 border-l-2 border-amber/40">
-            {narrative.sections.map((section, idx) => (
-              <div
-                key={idx}
-                className="p-space-md rounded-xl bg-surface border border-hairline hover:border-amber/40 transition-colors flex flex-col gap-2 shadow-xs"
-              >
-                <div className="flex items-center justify-between flex-wrap gap-1">
-                  <span className="font-code-sm text-caption font-bold text-ink-muted uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-amber/20 text-ink text-[11px] font-bold flex items-center justify-center">
-                      {idx + 1}
+          {!stepsCollapsed && (
+            <div className="flex flex-col gap-space-sm pl-2 border-l-2 border-amber/40">
+              {narrative.sections.map((section, idx) => (
+                <div
+                  key={idx}
+                  className="p-space-md rounded-xl bg-surface border border-hairline hover:border-amber/40 transition-colors flex flex-col gap-2 shadow-xs"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <span className="font-code-sm text-caption font-bold text-ink-muted uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-amber/20 text-ink text-[11px] font-bold flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      Step {idx + 1}
                     </span>
-                    Step {idx + 1}
-                  </span>
-                  {section.rule && (
-                    <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface-container border border-hairline">
-                      {section.rule}
-                    </span>
+                    {section.rule && (
+                      <span className="font-code-sm text-[11px] text-ink-muted px-2 py-0.5 rounded bg-surface-container border border-hairline">
+                        {section.rule}
+                      </span>
+                    )}
+                  </div>
+
+                  {section.mathExpression && (
+                    <div className="p-3 rounded-lg bg-surface-container-low border border-hairline overflow-x-auto flex items-center justify-center text-center">
+                      <MathRenderer math={section.mathExpression} block className="text-lg sm:text-xl text-ink font-medium" />
+                    </div>
                   )}
                 </div>
-
-                {section.mathExpression && (
-                  <div className="p-3 rounded-lg bg-surface-container-low border border-hairline overflow-x-auto flex items-center justify-center text-center">
-                    <MathRenderer math={section.mathExpression} block className="text-lg sm:text-xl text-ink font-medium" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Definitive Final Answer Box */}
           <div className="rounded-xl border-2 border-amber bg-gradient-to-r from-surface via-surface to-amber/5 p-space-md flex flex-col gap-2 shadow-xs">
@@ -197,7 +249,7 @@ export function CompleteSolutionNarrative({
             </div>
             <div className="flex items-center justify-between pt-1 border-t border-hairline text-ink-muted font-caption text-caption">
               <span className="flex items-center gap-1.5 text-secondary font-semibold">
-                <span className="material-symbols-outlined text-[16px]">verified</span>
+                <CheckCircle2 className="w-4 h-4 text-secondary" />
                 Verified
               </span>
               <span className="font-code-sm text-[11px]">Exact CAS</span>
@@ -228,7 +280,11 @@ export function CompleteSolutionNarrative({
               onClick={handleCopyText}
               className="px-3 py-1 rounded-md bg-surface border border-hairline hover:bg-surface-container text-ink font-code-sm text-caption flex items-center gap-1 cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[14px]">content_copy</span>
+              {copiedText ? (
+                <Check className="w-3.5 h-3.5 text-secondary" />
+              ) : (
+                <Copy className="w-3.5 h-3.5 text-ink" />
+              )}
               <span>{copiedText ? 'Copied!' : 'Copy to Clipboard'}</span>
             </button>
           </div>

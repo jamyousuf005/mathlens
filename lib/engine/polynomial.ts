@@ -81,6 +81,10 @@ export class Polynomial {
     this.terms = normalizeTerms(terms);
   }
 
+  getTerms(): ReadonlyMap<string, Fraction> {
+    return this.terms;
+  }
+
   static zero(): Polynomial {
     return new Polynomial();
   }
@@ -343,6 +347,42 @@ export class Polynomial {
         }
         return left.pow(value);
       }
+    }
+    if (node.type === 'PostfixOp') {
+      const arg = Polynomial.fromAst(node.argument);
+      const val = arg.constantValue();
+      if (val === null) {
+        throw new UnsupportedMathError(`Operator '${node.operator}' is only supported on constant values.`);
+      }
+      if (node.operator === '%') {
+        return Polynomial.constant(val.div(new Fraction(100n)));
+      }
+      if (node.operator === '!') {
+        if (!val.isInteger() || val.n < 0n || val.n > 100n) {
+          throw new UnsupportedMathError('Factorial is only defined for non-negative integers <= 100.');
+        }
+        let fact = 1n;
+        for (let i = 2n; i <= val.n; i++) fact *= i;
+        return Polynomial.constant(new Fraction(fact));
+      }
+    }
+    if (node.type === 'FunctionCall') {
+      const arg = Polynomial.fromAst(node.argument);
+      const val = arg.constantValue();
+      if (val === null) {
+        throw new UnsupportedMathError(`Function '${node.name}' with variables is not supported in polynomials yet.`);
+      }
+      if (node.name === 'abs') {
+        return Polynomial.constant(val.abs());
+      }
+      if (node.name === 'sqrt') {
+        const sq = Fraction.sqrt(val);
+        if (sq === null) {
+          throw new UnsupportedMathError(`Cannot compute exact rational square root of ${val.toString()}`);
+        }
+        return Polynomial.constant(sq);
+      }
+      throw new UnsupportedMathError(`Function '${node.name}' is only supported in arithmetic evaluation.`);
     }
     throw new UnsupportedMathError('Unsupported expression.');
   }

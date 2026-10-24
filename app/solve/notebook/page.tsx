@@ -341,7 +341,7 @@ export default function NotebookHistoryPage() {
                         </span>
                       </button>
                       <Link
-                        href={`/solve/type?expr=${encodeURIComponent(item.expression)}`}
+                        href={`/solve/type?expr=${encodeURIComponent(item.expression)}&historyId=${encodeURIComponent(item.id)}`}
                         className="flex h-8 items-center gap-1 rounded-lg px-2 text-ink-muted transition-colors hover:bg-surface-container hover:text-ink"
                         aria-label="Reopen expression"
                       >

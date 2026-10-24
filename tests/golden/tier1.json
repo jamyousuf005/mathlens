@@ -1,0 +1,1002 @@
+[
+  {
+    "id": 1,
+    "expr": "2+2",
+    "expected": "4"
+  },
+  {
+    "id": 2,
+    "expr": "10-3",
+    "expected": "7"
+  },
+  {
+    "id": 3,
+    "expr": "4*5",
+    "expected": "20"
+  },
+  {
+    "id": 4,
+    "expr": "12/4",
+    "expected": "3"
+  },
+  {
+    "id": 5,
+    "expr": "2^3",
+    "expected": "8"
+  },
+  {
+    "id": 6,
+    "expr": "5!",
+    "expected": "120"
+  },
+  {
+    "id": 7,
+    "expr": "0!",
+    "expected": "1"
+  },
+  {
+    "id": 8,
+    "expr": "50%",
+    "expected": "1/2"
+  },
+  {
+    "id": 9,
+    "expr": "sqrt(16)",
+    "expected": "4"
+  },
+  {
+    "id": 10,
+    "expr": "sqrt(144)",
+    "expected": "12"
+  },
+  {
+    "id": 11,
+    "expr": "abs(-5)",
+    "expected": "5"
+  },
+  {
+    "id": 12,
+    "expr": "|-7|",
+    "expected": "7"
+  },
+  {
+    "id": 13,
+    "expr": "2+3*4",
+    "expected": "14"
+  },
+  {
+    "id": 14,
+    "expr": "(2+3)*4",
+    "expected": "20"
+  },
+  {
+    "id": 15,
+    "expr": "10/(2+3)",
+    "expected": "2"
+  },
+  {
+    "id": 16,
+    "expr": "2^2+3^2",
+    "expected": "13"
+  },
+  {
+    "id": 17,
+    "expr": "1/2+1/4",
+    "expected": "3/4"
+  },
+  {
+    "id": 18,
+    "expr": "3/5-1/10",
+    "expected": "1/2"
+  },
+  {
+    "id": 19,
+    "expr": "0.1+0.2",
+    "expected": "3/10"
+  },
+  {
+    "id": 20,
+    "expr": "2^-1",
+    "expected": "1/2"
+  },
+  {
+    "id": 21,
+    "expr": "2^-2",
+    "expected": "1/4"
+  },
+  {
+    "id": 22,
+    "expr": "(-2)^2",
+    "expected": "4"
+  },
+  {
+    "id": 23,
+    "expr": "(-2)^3",
+    "expected": "-8"
+  },
+  {
+    "id": 24,
+    "expr": "-2^2",
+    "expected": "-4"
+  },
+  {
+    "id": 25,
+    "expr": "sqrt(9)+4!",
+    "expected": "27"
+  },
+  {
+    "id": 26,
+    "expr": "100*25%",
+    "expected": "25"
+  },
+  {
+    "id": 27,
+    "expr": "abs(3-8)",
+    "expected": "5"
+  },
+  {
+    "id": 28,
+    "expr": "2*(3+(4*5))",
+    "expected": "46"
+  },
+  {
+    "id": 29,
+    "expr": "(10-2)/(3+1)",
+    "expected": "2"
+  },
+  {
+    "id": 30,
+    "expr": "3^0",
+    "expected": "1"
+  },
+  {
+    "id": 31,
+    "expr": "4^1",
+    "expected": "4"
+  },
+  {
+    "id": 32,
+    "expr": "5*(2+3)",
+    "expected": "25"
+  },
+  {
+    "id": 33,
+    "expr": "2(3+4)",
+    "expected": "14"
+  },
+  {
+    "id": 34,
+    "expr": "10%*200",
+    "expected": "20"
+  },
+  {
+    "id": 35,
+    "expr": "sqrt(25)+sqrt(36)",
+    "expected": "11"
+  },
+  {
+    "id": 36,
+    "expr": "3!+4!",
+    "expected": "30"
+  },
+  {
+    "id": 37,
+    "expr": "abs(-12)+abs(-8)",
+    "expected": "20"
+  },
+  {
+    "id": 38,
+    "expr": "1/3+1/6",
+    "expected": "1/2"
+  },
+  {
+    "id": 39,
+    "expr": "7/8-3/8",
+    "expected": "1/2"
+  },
+  {
+    "id": 40,
+    "expr": "2^3^2",
+    "expected": "512"
+  },
+  {
+    "id": 41,
+    "expr": "2x+2=4",
+    "expected": "x = 1"
+  },
+  {
+    "id": 42,
+    "expr": "3x+4=10",
+    "expected": "x = 2"
+  },
+  {
+    "id": 43,
+    "expr": "4x+6=18",
+    "expected": "x = 3"
+  },
+  {
+    "id": 44,
+    "expr": "5x+8=28",
+    "expected": "x = 4"
+  },
+  {
+    "id": 45,
+    "expr": "1x+10=15",
+    "expected": "x = 5"
+  },
+  {
+    "id": 46,
+    "expr": "2x+12=24",
+    "expected": "x = 6"
+  },
+  {
+    "id": 47,
+    "expr": "3x+14=35",
+    "expected": "x = 7"
+  },
+  {
+    "id": 48,
+    "expr": "4x+16=48",
+    "expected": "x = 8"
+  },
+  {
+    "id": 49,
+    "expr": "5x+18=63",
+    "expected": "x = 9"
+  },
+  {
+    "id": 50,
+    "expr": "1x+20=30",
+    "expected": "x = 10"
+  },
+  {
+    "id": 51,
+    "expr": "2x+22=44",
+    "expected": "x = 11"
+  },
+  {
+    "id": 52,
+    "expr": "3x+24=60",
+    "expected": "x = 12"
+  },
+  {
+    "id": 53,
+    "expr": "4x+26=78",
+    "expected": "x = 13"
+  },
+  {
+    "id": 54,
+    "expr": "5x+28=98",
+    "expected": "x = 14"
+  },
+  {
+    "id": 55,
+    "expr": "1x+30=45",
+    "expected": "x = 15"
+  },
+  {
+    "id": 56,
+    "expr": "2x+32=64",
+    "expected": "x = 16"
+  },
+  {
+    "id": 57,
+    "expr": "3x+34=85",
+    "expected": "x = 17"
+  },
+  {
+    "id": 58,
+    "expr": "4x+36=108",
+    "expected": "x = 18"
+  },
+  {
+    "id": 59,
+    "expr": "5x+38=133",
+    "expected": "x = 19"
+  },
+  {
+    "id": 60,
+    "expr": "1x+40=60",
+    "expected": "x = 20"
+  },
+  {
+    "id": 61,
+    "expr": "2x+42=84",
+    "expected": "x = 21"
+  },
+  {
+    "id": 62,
+    "expr": "3x+44=110",
+    "expected": "x = 22"
+  },
+  {
+    "id": 63,
+    "expr": "4x+46=138",
+    "expected": "x = 23"
+  },
+  {
+    "id": 64,
+    "expr": "5x+48=168",
+    "expected": "x = 24"
+  },
+  {
+    "id": 65,
+    "expr": "1x+50=75",
+    "expected": "x = 25"
+  },
+  {
+    "id": 66,
+    "expr": "2x+52=104",
+    "expected": "x = 26"
+  },
+  {
+    "id": 67,
+    "expr": "3x+54=135",
+    "expected": "x = 27"
+  },
+  {
+    "id": 68,
+    "expr": "4x+56=168",
+    "expected": "x = 28"
+  },
+  {
+    "id": 69,
+    "expr": "5x+58=203",
+    "expected": "x = 29"
+  },
+  {
+    "id": 70,
+    "expr": "1x+60=90",
+    "expected": "x = 30"
+  },
+  {
+    "id": 71,
+    "expr": "2x+62=124",
+    "expected": "x = 31"
+  },
+  {
+    "id": 72,
+    "expr": "3x+64=160",
+    "expected": "x = 32"
+  },
+  {
+    "id": 73,
+    "expr": "4x+66=198",
+    "expected": "x = 33"
+  },
+  {
+    "id": 74,
+    "expr": "5x+68=238",
+    "expected": "x = 34"
+  },
+  {
+    "id": 75,
+    "expr": "1x+70=105",
+    "expected": "x = 35"
+  },
+  {
+    "id": 76,
+    "expr": "2x+72=144",
+    "expected": "x = 36"
+  },
+  {
+    "id": 77,
+    "expr": "3x+74=185",
+    "expected": "x = 37"
+  },
+  {
+    "id": 78,
+    "expr": "4x+76=228",
+    "expected": "x = 38"
+  },
+  {
+    "id": 79,
+    "expr": "5x+78=273",
+    "expected": "x = 39"
+  },
+  {
+    "id": 80,
+    "expr": "1x+80=120",
+    "expected": "x = 40"
+  },
+  {
+    "id": 81,
+    "expr": "x+y=5, 2x-y=1",
+    "expected": "x = 2, y = 3"
+  },
+  {
+    "id": 82,
+    "expr": "x+y=7, 2x-y=2",
+    "expected": "x = 3, y = 4"
+  },
+  {
+    "id": 83,
+    "expr": "x+y=6, 2x-y=6",
+    "expected": "x = 4, y = 2"
+  },
+  {
+    "id": 84,
+    "expr": "x+y=4, 2x-y=-1",
+    "expected": "x = 1, y = 3"
+  },
+  {
+    "id": 85,
+    "expr": "x+y=6, 2x-y=0",
+    "expected": "x = 2, y = 4"
+  },
+  {
+    "id": 86,
+    "expr": "x+y=5, 2x-y=4",
+    "expected": "x = 3, y = 2"
+  },
+  {
+    "id": 87,
+    "expr": "x+y=7, 2x-y=5",
+    "expected": "x = 4, y = 3"
+  },
+  {
+    "id": 88,
+    "expr": "x+y=5, 2x-y=-2",
+    "expected": "x = 1, y = 4"
+  },
+  {
+    "id": 89,
+    "expr": "x+y=4, 2x-y=2",
+    "expected": "x = 2, y = 2"
+  },
+  {
+    "id": 90,
+    "expr": "x+y=6, 2x-y=3",
+    "expected": "x = 3, y = 3"
+  },
+  {
+    "id": 91,
+    "expr": "x+y=8, 2x-y=4",
+    "expected": "x = 4, y = 4"
+  },
+  {
+    "id": 92,
+    "expr": "x+y=3, 2x-y=0",
+    "expected": "x = 1, y = 2"
+  },
+  {
+    "id": 93,
+    "expr": "x+y=5, 2x-y=1",
+    "expected": "x = 2, y = 3"
+  },
+  {
+    "id": 94,
+    "expr": "x+y=7, 2x-y=2",
+    "expected": "x = 3, y = 4"
+  },
+  {
+    "id": 95,
+    "expr": "x+y=6, 2x-y=6",
+    "expected": "x = 4, y = 2"
+  },
+  {
+    "id": 96,
+    "expr": "x+y=4, 2x-y=-1",
+    "expected": "x = 1, y = 3"
+  },
+  {
+    "id": 97,
+    "expr": "x+y=6, 2x-y=0",
+    "expected": "x = 2, y = 4"
+  },
+  {
+    "id": 98,
+    "expr": "x+y=5, 2x-y=4",
+    "expected": "x = 3, y = 2"
+  },
+  {
+    "id": 99,
+    "expr": "x+y=7, 2x-y=5",
+    "expected": "x = 4, y = 3"
+  },
+  {
+    "id": 100,
+    "expr": "x+y=5, 2x-y=-2",
+    "expected": "x = 1, y = 4"
+  },
+  {
+    "id": 101,
+    "expr": "x+y=4, 2x-y=2",
+    "expected": "x = 2, y = 2"
+  },
+  {
+    "id": 102,
+    "expr": "x+y=6, 2x-y=3",
+    "expected": "x = 3, y = 3"
+  },
+  {
+    "id": 103,
+    "expr": "x+y=8, 2x-y=4",
+    "expected": "x = 4, y = 4"
+  },
+  {
+    "id": 104,
+    "expr": "x+y=3, 2x-y=0",
+    "expected": "x = 1, y = 2"
+  },
+  {
+    "id": 105,
+    "expr": "x+y=5, 2x-y=1",
+    "expected": "x = 2, y = 3"
+  },
+  {
+    "id": 106,
+    "expr": "x+y=7, 2x-y=2",
+    "expected": "x = 3, y = 4"
+  },
+  {
+    "id": 107,
+    "expr": "x+y=6, 2x-y=6",
+    "expected": "x = 4, y = 2"
+  },
+  {
+    "id": 108,
+    "expr": "x+y=4, 2x-y=-1",
+    "expected": "x = 1, y = 3"
+  },
+  {
+    "id": 109,
+    "expr": "x+y=6, 2x-y=0",
+    "expected": "x = 2, y = 4"
+  },
+  {
+    "id": 110,
+    "expr": "x+y=5, 2x-y=4",
+    "expected": "x = 3, y = 2"
+  },
+  {
+    "id": 111,
+    "expr": "x+y=7, 2x-y=5",
+    "expected": "x = 4, y = 3"
+  },
+  {
+    "id": 112,
+    "expr": "x+y=5, 2x-y=-2",
+    "expected": "x = 1, y = 4"
+  },
+  {
+    "id": 113,
+    "expr": "x+y=4, 2x-y=2",
+    "expected": "x = 2, y = 2"
+  },
+  {
+    "id": 114,
+    "expr": "x+y=6, 2x-y=3",
+    "expected": "x = 3, y = 3"
+  },
+  {
+    "id": 115,
+    "expr": "x+y=8, 2x-y=4",
+    "expected": "x = 4, y = 4"
+  },
+  {
+    "id": 116,
+    "expr": "x+y=3, 2x-y=0",
+    "expected": "x = 1, y = 2"
+  },
+  {
+    "id": 117,
+    "expr": "x+y=5, 2x-y=1",
+    "expected": "x = 2, y = 3"
+  },
+  {
+    "id": 118,
+    "expr": "x+y=7, 2x-y=2",
+    "expected": "x = 3, y = 4"
+  },
+  {
+    "id": 119,
+    "expr": "x+y=6, 2x-y=6",
+    "expected": "x = 4, y = 2"
+  },
+  {
+    "id": 120,
+    "expr": "x+y=4, 2x-y=-1",
+    "expected": "x = 1, y = 3"
+  },
+  {
+    "id": 121,
+    "expr": "x^2-5x+6=0",
+    "expected": "x = 2, x = 3"
+  },
+  {
+    "id": 122,
+    "expr": "x^2-7x+12=0",
+    "expected": "x = 3, x = 4"
+  },
+  {
+    "id": 123,
+    "expr": "x^2-6x+8=0",
+    "expected": "x = 2, x = 4"
+  },
+  {
+    "id": 124,
+    "expr": "x^2-8x+15=0",
+    "expected": "x = 3, x = 5"
+  },
+  {
+    "id": 125,
+    "expr": "x^2-5x+4=0",
+    "expected": "x = 1, x = 4"
+  },
+  {
+    "id": 126,
+    "expr": "x^2-4x+4=0",
+    "expected": "x = 2"
+  },
+  {
+    "id": 127,
+    "expr": "x^2-6x+9=0",
+    "expected": "x = 3"
+  },
+  {
+    "id": 128,
+    "expr": "x^2-8x+16=0",
+    "expected": "x = 4"
+  },
+  {
+    "id": 129,
+    "expr": "x^2-7x+10=0",
+    "expected": "x = 2, x = 5"
+  },
+  {
+    "id": 130,
+    "expr": "x^2-4x+3=0",
+    "expected": "x = 1, x = 3"
+  },
+  {
+    "id": 131,
+    "expr": "x^2-6x+8=0",
+    "expected": "x = 2, x = 4"
+  },
+  {
+    "id": 132,
+    "expr": "x^2-5x+6=0",
+    "expected": "x = 2, x = 3"
+  },
+  {
+    "id": 133,
+    "expr": "x^2-7x+12=0",
+    "expected": "x = 3, x = 4"
+  },
+  {
+    "id": 134,
+    "expr": "x^2-9x+20=0",
+    "expected": "x = 4, x = 5"
+  },
+  {
+    "id": 135,
+    "expr": "x^2-3x+2=0",
+    "expected": "x = 1, x = 2"
+  },
+  {
+    "id": 136,
+    "expr": "x^2-5x+6=0",
+    "expected": "x = 2, x = 3"
+  },
+  {
+    "id": 137,
+    "expr": "x^2-7x+12=0",
+    "expected": "x = 3, x = 4"
+  },
+  {
+    "id": 138,
+    "expr": "x^2-6x+8=0",
+    "expected": "x = 2, x = 4"
+  },
+  {
+    "id": 139,
+    "expr": "x^2-8x+15=0",
+    "expected": "x = 3, x = 5"
+  },
+  {
+    "id": 140,
+    "expr": "x^2-5x+4=0",
+    "expected": "x = 1, x = 4"
+  },
+  {
+    "id": 141,
+    "expr": "x^2-4x+4=0",
+    "expected": "x = 2"
+  },
+  {
+    "id": 142,
+    "expr": "x^2-6x+9=0",
+    "expected": "x = 3"
+  },
+  {
+    "id": 143,
+    "expr": "x^2-8x+16=0",
+    "expected": "x = 4"
+  },
+  {
+    "id": 144,
+    "expr": "x^2-7x+10=0",
+    "expected": "x = 2, x = 5"
+  },
+  {
+    "id": 145,
+    "expr": "x^2-4x+3=0",
+    "expected": "x = 1, x = 3"
+  },
+  {
+    "id": 146,
+    "expr": "x^2-6x+8=0",
+    "expected": "x = 2, x = 4"
+  },
+  {
+    "id": 147,
+    "expr": "x^2-5x+6=0",
+    "expected": "x = 2, x = 3"
+  },
+  {
+    "id": 148,
+    "expr": "x^2-7x+12=0",
+    "expected": "x = 3, x = 4"
+  },
+  {
+    "id": 149,
+    "expr": "x^2-9x+20=0",
+    "expected": "x = 4, x = 5"
+  },
+  {
+    "id": 150,
+    "expr": "x^2-3x+2=0",
+    "expected": "x = 1, x = 2"
+  },
+  {
+    "id": 151,
+    "expr": "x^2-5x+6=0",
+    "expected": "x = 2, x = 3"
+  },
+  {
+    "id": 152,
+    "expr": "x^2-7x+12=0",
+    "expected": "x = 3, x = 4"
+  },
+  {
+    "id": 153,
+    "expr": "x^2-6x+8=0",
+    "expected": "x = 2, x = 4"
+  },
+  {
+    "id": 154,
+    "expr": "x^2-8x+15=0",
+    "expected": "x = 3, x = 5"
+  },
+  {
+    "id": 155,
+    "expr": "x^2-5x+4=0",
+    "expected": "x = 1, x = 4"
+  },
+  {
+    "id": 156,
+    "expr": "x^2-4x+4=0",
+    "expected": "x = 2"
+  },
+  {
+    "id": 157,
+    "expr": "x^2-6x+9=0",
+    "expected": "x = 3"
+  },
+  {
+    "id": 158,
+    "expr": "x^2-8x+16=0",
+    "expected": "x = 4"
+  },
+  {
+    "id": 159,
+    "expr": "x^2-7x+10=0",
+    "expected": "x = 2, x = 5"
+  },
+  {
+    "id": 160,
+    "expr": "x^2-4x+3=0",
+    "expected": "x = 1, x = 3"
+  },
+  {
+    "id": 161,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 162,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 163,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 164,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 165,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 166,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 167,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 168,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 169,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 170,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 171,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 172,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 173,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 174,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 175,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 176,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 177,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 178,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 179,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 180,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 181,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 182,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 183,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 184,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 185,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 186,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 187,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 188,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 189,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 190,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 191,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 192,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 193,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 194,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 195,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  },
+  {
+    "id": 196,
+    "expr": "x^2+4x+4",
+    "expected": "(x + 2)^2"
+  },
+  {
+    "id": 197,
+    "expr": "x^2+6x+9",
+    "expected": "(x + 3)^2"
+  },
+  {
+    "id": 198,
+    "expr": "x^2+8x+16",
+    "expected": "(x + 4)^2"
+  },
+  {
+    "id": 199,
+    "expr": "x^2+10x+25",
+    "expected": "(x + 5)^2"
+  },
+  {
+    "id": 200,
+    "expr": "x^2+2x+1",
+    "expected": "(x + 1)^2"
+  }
+]

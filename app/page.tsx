@@ -164,10 +164,6 @@ export default function Home() {
               </div>
               <span className="font-semibold text-lg sm:text-xl tracking-tight text-ink">MathLens</span>
             </Link>
-            <Badge variant="default" className="hidden md:inline-flex">
-              <span className="w-1.5 h-1.5 rounded-full bg-sage"></span>
-              <span>v1.0 • Client-side CAS</span>
-            </Badge>
           </div>
 
           {/* Navigation Links (Desktop) */}
@@ -180,7 +176,7 @@ export default function Home() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <Button variant="secondary" size="sm" asChild className="hidden sm:inline-flex">
+            <Button variant="secondary" size="sm" asChild className="hidden sm:inline-flex h-9 px-3.5 sm:h-10 sm:px-5">
               <Link href="/auth">Sign In</Link>
             </Button>
             <Button variant="default" size="sm" asChild className="h-9 px-3.5 sm:h-10 sm:px-5">
@@ -226,7 +222,7 @@ export default function Home() {
               <Button variant="secondary" size="lg" asChild className="w-full sm:w-auto h-12 sm:h-[54px]">
                 <Link href="/auth" className="flex items-center justify-center gap-2">
                   <School className="w-4 h-4 text-tertiary shrink-0" />
-                  <span>Quick Singin</span>
+                  <span>Quick Sign In</span>
                 </Link>
               </Button>
             </div>

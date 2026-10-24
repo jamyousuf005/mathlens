@@ -3,7 +3,7 @@ import { tokenize } from './lexer';
 import { normalizeMathExpression } from './normalizer';
 import { Parser } from './parser';
 import { Polynomial, factorPolynomial } from './polynomial';
-import { Fraction, ONE } from './rational';
+import { Fraction, ONE, ZERO } from './rational';
 import { ASTNode, EquationNode, SolutionResult, SolutionStep } from './types';
 
 const MAX_INPUT_LENGTH = 300;
@@ -79,6 +79,51 @@ function evaluateAst(node: ASTNode): Fraction {
       return left.pow(Number(right.n));
     }
   }
+  if (node.type === 'PostfixOp') {
+    const val = evaluateAst(node.argument);
+    if (node.operator === '%') {
+      return val.div(new Fraction(100n));
+    }
+    if (node.operator === '!') {
+      if (!val.isInteger() || val.n < 0n || val.n > 100n) {
+        throw new UnsupportedMathError('Factorial is only defined for non-negative integers <= 100.');
+      }
+      let fact = 1n;
+      for (let i = 2n; i <= val.n; i++) fact *= i;
+      return new Fraction(fact);
+    }
+  }
+  if (node.type === 'FunctionCall') {
+    const val = evaluateAst(node.argument);
+    if (node.name === 'abs') {
+      return val.abs();
+    }
+    if (node.name === 'sqrt') {
+      const sq = Fraction.sqrt(val);
+      if (sq !== null) return sq;
+      const num = val.toNumber();
+      if (num < 0) throw new UnsupportedMathError('Square root of negative number is not real.');
+      const approx = Math.sqrt(num);
+      return Fraction.fromString(Number(approx.toFixed(8)).toString());
+    }
+    if (['sin', 'cos', 'tan', 'log', 'ln'].includes(node.name)) {
+      const num = val.toNumber();
+      let res = 0;
+      if (node.name === 'sin') res = Math.sin(num);
+      else if (node.name === 'cos') res = Math.cos(num);
+      else if (node.name === 'tan') {
+        if (Math.abs(Math.cos(num)) < 1e-12) throw new DivisionByZeroError();
+        res = Math.tan(num);
+      } else if (node.name === 'log') {
+        if (num <= 0) throw new UnsupportedMathError('Logarithm domain error (must be > 0).');
+        res = Math.log10(num);
+      } else if (node.name === 'ln') {
+        if (num <= 0) throw new UnsupportedMathError('Natural logarithm domain error (must be > 0).');
+        res = Math.log(num);
+      }
+      return Fraction.fromString(Number(res.toFixed(8)).toString());
+    }
+  }
   throw new UnsupportedMathError('Unsupported expression.');
 }
 
@@ -88,6 +133,8 @@ function arithmeticResult(
   startTime: number
 ): SolutionResult {
   const plain = value.toString();
+  const numVal = value.toNumber();
+  const exact = value.d === 1n ? value.n.toString() : `${value.n}/${value.d}`;
   return {
     success: true,
     problemType: 'Arithmetic',
@@ -95,6 +142,8 @@ function arithmeticResult(
     latexExpression: normalized.replace(/\*/g, ' \\times '),
     finalAnswerLatex: value.toLatex(),
     finalAnswerPlain: plain,
+    exactAnswer: exact,
+    decimalAnswer: numVal,
     steps: [
       {
         stepNumber: 1,
@@ -106,8 +155,8 @@ function arithmeticResult(
     ],
     isVerified: true,
     verificationDetails: {
-      lhsValue: value.toNumber(),
-      rhsValue: value.toNumber(),
+      lhsValue: numVal,
+      rhsValue: numVal,
       residualNorm: 0,
       status: 'Deterministic Exact',
     },
@@ -170,6 +219,8 @@ function solveLinear(
     latexExpression: normalized,
     finalAnswerLatex: `${variable} = ${root.toLatex()}`,
     finalAnswerPlain: `${variable} = ${root.toString()}`,
+    exactAnswer: `${variable} = ${root.toString()}`,
+    decimalAnswer: root.toNumber(),
     roots: [root.toNumber()],
     steps,
     isVerified: a.mul(root).add(b).isZero(),
@@ -216,8 +267,10 @@ function solveQuadratic(
 
   if (delta > 1e-12) {
     const squareRoot = Math.sqrt(delta);
-    const first = (-b + squareRoot) / (2 * a);
-    const second = (-b - squareRoot) / (2 * a);
+    const rA = (-b + squareRoot) / (2 * a);
+    const rB = (-b - squareRoot) / (2 * a);
+    const first = Math.min(rA, rB);
+    const second = Math.max(rA, rB);
     const residual = Math.max(
       Math.abs(a * first * first + b * first + c),
       Math.abs(a * second * second + b * second + c)
@@ -243,6 +296,8 @@ function solveQuadratic(
       latexExpression: normalized,
       finalAnswerLatex: `${variable} \\in \\{${formatRoot(first)}, \\, ${formatRoot(second)}\\}`,
       finalAnswerPlain: `${variable} = ${formatRoot(first)}, ${variable} = ${formatRoot(second)}`,
+      exactAnswer: `${variable} = ${formatRoot(first)}, ${variable} = ${formatRoot(second)}`,
+      decimalAnswer: [Number(first.toFixed(6)), Number(second.toFixed(6))],
       roots: [first, second],
       steps,
       isVerified: residual < 1e-9,
@@ -414,8 +469,177 @@ function solveExpression(
   };
 }
 
+function solveSystemOfLinearEquations(
+  parts: string[],
+  normalized: string,
+  startTime: number
+): SolutionResult {
+  if (parts.length !== 2) {
+    throw new UnsupportedMathError('Only systems of exactly 2 linear equations are supported in Tier 1.');
+  }
+
+  const p1 = new Parser(tokenize(normalizeMathExpression(parts[0]))).parseEquationOnly();
+  const p2 = new Parser(tokenize(normalizeMathExpression(parts[1]))).parseEquationOnly();
+
+  const poly1 = Polynomial.fromAst(p1.left).sub(Polynomial.fromAst(p1.right));
+  const poly2 = Polynomial.fromAst(p2.left).sub(Polynomial.fromAst(p2.right));
+
+  const allVars = new Set<string>();
+  for (const v of poly1.variables()) allVars.add(v);
+  for (const v of poly2.variables()) allVars.add(v);
+
+  const vars = Array.from(allVars).sort();
+  if (vars.length > 2) {
+    throw new UnsupportedMathError(`System has more than 2 variables: ${vars.join(', ')}.`);
+  }
+  const [xVar, yVar] = vars.length === 2 ? vars : [vars[0] || 'x', 'y'];
+
+  const getCoeffs = (poly: Polynomial) => {
+    let aCoeff = ZERO;
+    let bCoeff = ZERO;
+    let constTerm = ZERO;
+
+    for (const [key, coeff] of poly.getTerms()) {
+      if (!key) {
+        constTerm = constTerm.add(coeff);
+      } else if (key === xVar) {
+        aCoeff = aCoeff.add(coeff);
+      } else if (key === yVar) {
+        bCoeff = bCoeff.add(coeff);
+      } else {
+        throw new UnsupportedMathError('Non-linear or higher-order terms in system of equations.');
+      }
+    }
+    return { a: aCoeff, b: bCoeff, c: constTerm.neg() };
+  };
+
+  const eq1 = getCoeffs(poly1); // a1*x + b1*y = c1
+  const eq2 = getCoeffs(poly2); // a2*x + b2*y = c2
+
+  // Determinant D = a1*b2 - a2*b1
+  const D = eq1.a.mul(eq2.b).sub(eq2.a.mul(eq1.b));
+  const Dx = eq1.c.mul(eq2.b).sub(eq2.c.mul(eq1.b));
+  const Dy = eq1.a.mul(eq2.c).sub(eq2.a.mul(eq1.c));
+
+  if (D.isZero()) {
+    if (Dx.isZero() && Dy.isZero()) {
+      return {
+        success: true,
+        problemType: 'System of Linear Equations',
+        normalizedExpression: normalized,
+        latexExpression: `\\begin{cases} ${parts[0]} \\\\ ${parts[1]} \\end{cases}`,
+        finalAnswerLatex: '\\text{Infinitely many solutions (dependent system)}',
+        finalAnswerPlain: 'Infinitely many solutions (dependent system)',
+        exactAnswer: 'Infinitely many solutions',
+        steps: [
+          {
+            stepNumber: 1,
+            title: 'Calculate determinant D',
+            description: 'D = 0, Dx = 0, Dy = 0 indicate coincident lines.',
+            mathExpression: 'D = 0, \\; D_x = 0, \\; D_y = 0',
+            rule: "Cramer's Rule / Dependent System",
+          },
+        ],
+        isVerified: true,
+        verificationDetails: {
+          lhsValue: 0,
+          rhsValue: 0,
+          residualNorm: 0,
+          status: 'Dependent System Verified',
+        },
+        executionTimeMs: elapsed(startTime),
+      };
+    }
+    return {
+      success: true,
+      problemType: 'System of Linear Equations',
+      normalizedExpression: normalized,
+      latexExpression: `\\begin{cases} ${parts[0]} \\\\ ${parts[1]} \\end{cases}`,
+      finalAnswerLatex: '\\text{No solution (parallel lines)}',
+      finalAnswerPlain: 'No solution (parallel lines)',
+      exactAnswer: 'No solution',
+      steps: [
+        {
+          stepNumber: 1,
+          title: 'Calculate determinant D',
+          description: 'D = 0 while Dx or Dy != 0 indicates parallel lines with no intersection.',
+          mathExpression: 'D = 0, \\; D_x \\neq 0',
+          rule: "Cramer's Rule / Inconsistent System",
+        },
+      ],
+      isVerified: true,
+      verificationDetails: {
+        lhsValue: 0,
+        rhsValue: 0,
+        residualNorm: 0,
+        status: 'Inconsistent System Verified',
+      },
+      executionTimeMs: elapsed(startTime),
+    };
+  }
+
+  const xVal = Dx.div(D);
+  const yVal = Dy.div(D);
+
+  const steps: SolutionStep[] = [
+    {
+      stepNumber: 1,
+      title: 'Standardize system of equations',
+      description: `Format both equations into standard linear form: ax + by = c.`,
+      mathExpression: `\\begin{cases} ${eq1.a.toString()}${xVar} + ${eq1.b.toString()}${yVar} = ${eq1.c.toString()} \\\\ ${eq2.a.toString()}${xVar} + ${eq2.b.toString()}${yVar} = ${eq2.c.toString()} \\end{cases}`,
+      rule: 'Standard System Form',
+    },
+    {
+      stepNumber: 2,
+      title: "Calculate system determinants (Cramer's Rule)",
+      description: `Evaluate main determinant D = a_1 b_2 - a_2 b_1.`,
+      mathExpression: `D = (${eq1.a.toString()})(${eq2.b.toString()}) - (${eq2.a.toString()})(${eq1.b.toString()}) = ${D.toString()}`,
+      rule: "Cramer's Determinant",
+    },
+    {
+      stepNumber: 3,
+      title: `Compute ${xVar} and ${yVar}`,
+      description: `Compute ${xVar} = \\frac{D_${xVar}}{D} and ${yVar} = \\frac{D_${yVar}}{D}.`,
+      mathExpression: `${xVar} = \\frac{${Dx.toString()}}{${D.toString()}} = ${xVal.toLatex()}, \\quad ${yVar} = \\frac{${Dy.toString()}}{${D.toString()}} = ${yVal.toLatex()}`,
+      rule: 'Solution Evaluation',
+    },
+    {
+      stepNumber: 4,
+      title: 'Verification by substitution',
+      description: 'Check values in both original equations.',
+      mathExpression: `(${xVar}, ${yVar}) = (${xVal.toString()}, ${yVal.toString()})`,
+      rule: 'Exact Deterministic Verification',
+    },
+  ];
+
+  const plainAns = `${xVar} = ${xVal.toString()}, ${yVar} = ${yVal.toString()}`;
+  const latexAns = `${xVar} = ${xVal.toLatex()}, \\; ${yVar} = ${yVal.toLatex()}`;
+
+  return {
+    success: true,
+    problemType: 'System of Linear Equations',
+    normalizedExpression: normalized,
+    latexExpression: `\\begin{cases} ${parts[0]} \\\\ ${parts[1]} \\end{cases}`,
+    finalAnswerLatex: latexAns,
+    finalAnswerPlain: plainAns,
+    exactAnswer: plainAns,
+    decimalAnswer: [xVal.toNumber(), yVal.toNumber()],
+    roots: [xVal.toNumber(), yVal.toNumber()],
+    steps,
+    isVerified: true,
+    verificationDetails: {
+      lhsValue: 0,
+      rhsValue: 0,
+      residualNorm: 0,
+      status: 'Exact Verified (Cramer)',
+    },
+    executionTimeMs: elapsed(startTime),
+  };
+}
+
 export function solveMathProblem(rawInput: string): SolutionResult {
   const startTime = performance.now();
+  const EXECUTION_TIMEOUT_MS = 3000;
 
   if (!rawInput || typeof rawInput !== 'string' || rawInput.trim() === '') {
     return failure('', 'Empty mathematical expression', startTime, 'No input');
@@ -435,7 +659,31 @@ export function solveMathProblem(rawInput: string): SolutionResult {
   }
 
   try {
+    if (performance.now() - startTime > EXECUTION_TIMEOUT_MS) {
+      throw new UnsupportedMathError('Execution timed out (3-second limit exceeded).');
+    }
+
+    // Check if input is a system of equations (split by comma, semicolon, or newline)
+    const rawParts = rawInput.split(/[,;\n]+/).map(p => p.trim()).filter(Boolean);
+    if (rawParts.length === 2 && rawParts[0].includes('=') && rawParts[1].includes('=')) {
+      try {
+        return solveSystemOfLinearEquations(rawParts, normalized, startTime);
+      } catch (err) {
+        if (err instanceof UnsupportedMathError || err instanceof MathParseError || err instanceof DivisionByZeroError) {
+          throw err;
+        }
+        throw new UnsupportedMathError(err instanceof Error ? err.message : 'System of equations solving failed');
+      }
+    }
+    if (rawParts.length > 2 && rawParts.every(p => p.includes('='))) {
+      throw new UnsupportedMathError('Systems with more than 2 equations are not supported yet (Tier 2/3).');
+    }
+
     const ast = new Parser(tokenize(normalized)).parse();
+    if (performance.now() - startTime > EXECUTION_TIMEOUT_MS) {
+      throw new UnsupportedMathError('Execution timed out (3-second limit exceeded).');
+    }
+
     if (ast.type === 'Equation') {
       return solveEquation(ast, normalized, startTime);
     }

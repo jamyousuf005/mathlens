@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { solveMathProblem } from '@/lib/engine/solver';
 import { SolutionResult } from '@/lib/engine/types';
 import { saveHistory, setHistoryFavorite } from '@/lib/history';
@@ -362,6 +363,19 @@ export default function CaptureSolvePage() {
     setIsEditingConfirm(false);
     setCameraError(null);
 
+    if (currentExpression && currentExpression !== sol.normalizedExpression) {
+      void fetch('/api/ocr/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recognizedText: currentExpression,
+          correctedText: sol.normalizedExpression,
+          confidence: ocrConfidence,
+          engine: activeEngineUsed,
+        }),
+      }).catch(() => undefined);
+    }
+
     try {
       const record = await saveHistory({
         expression: sol.normalizedExpression,
@@ -426,10 +440,7 @@ export default function CaptureSolvePage() {
         <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-md border-b border-hairline pb-space-sm">
           <div className="flex flex-col gap-1.5 max-w-3xl">
             <div className="flex items-center gap-space-sm flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-olive-tint-soft text-ink font-code-sm text-code-sm font-semibold tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber"></span>
-                METHOD 01 • WEBCAM &amp; OPTICAL SCANNER
-              </span>
+             
               <span className="font-code-sm text-code-sm text-ink-muted">CLIENT RUNTIME CAS</span>
             </div>
             <h1 className="font-headline-xl text-headline-xl text-ink tracking-tight font-semibold">
@@ -543,8 +554,15 @@ export default function CaptureSolvePage() {
               {/* Camera Stream / Video Surface */}
               <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden bg-ink select-none flex items-center justify-center">
                 {cameraError && (
-                  <div className="absolute inset-x-2 top-2 z-30 rounded-lg bg-error/95 px-3 py-2 text-center text-[11px] font-medium text-white sm:inset-x-4 sm:top-12 sm:text-xs">
-                    {cameraError}
+                  <div className="absolute inset-x-2 top-2 z-30 flex flex-col items-center gap-1.5 rounded-lg bg-error/95 px-3 py-2 text-center text-[11px] font-medium text-white sm:inset-x-4 sm:top-12 sm:text-xs">
+                    <span>{cameraError}</span>
+                    <Link
+                      href="/solve/upload"
+                      className="inline-flex items-center gap-1 rounded bg-white px-2.5 py-1 text-xs font-semibold text-error hover:bg-surface transition-colors shadow-xs"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">upload_file</span>
+                      Switch to File Upload Instead
+                    </Link>
                   </div>
                 )}
                 {isCameraActive ? (

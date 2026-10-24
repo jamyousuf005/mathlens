@@ -1,5 +1,5 @@
 import { MathParseError } from './errors';
-import { ASTNode, BinaryOpNode, EquationNode, IdentifierNode, NumberNode, Token, UnaryOpNode } from './types';
+import { ASTNode, BinaryOpNode, EquationNode, FunctionCallNode, IdentifierNode, NumberNode, PostfixOpNode, Token, UnaryOpNode } from './types';
 
 function validateTokenSequence(tokens: Token[]): void {
   for (let i = 0; i < tokens.length - 1; i++) {
@@ -41,6 +41,16 @@ export class Parser {
       throw new MathParseError(`Unexpected token '${this.current().value}'`, this.current().position);
     }
     return left;
+  }
+
+  parseEquationOnly(): EquationNode {
+    const left = this.parseExpression();
+    if (this.current().type !== 'EQUALS') {
+      throw new MathParseError("Expected '=' in equation", this.current().position);
+    }
+    this.eat('EQUALS');
+    const right = this.parseExpression();
+    return { type: 'Equation', left, right };
   }
 
   private current(): Token {
@@ -101,7 +111,7 @@ export class Parser {
   }
 
   private parsePower(): ASTNode {
-    const left = this.parsePrimary();
+    const left = this.parsePostfix();
     if (this.current().type === 'POWER') {
       this.eat('POWER');
       const right = this.parseUnary();
@@ -109,6 +119,19 @@ export class Parser {
       return binary;
     }
     return left;
+  }
+
+  private parsePostfix(): ASTNode {
+    let node = this.parsePrimary();
+    while (this.current().type === 'FACTORIAL' || this.current().type === 'PERCENT') {
+      const op = this.eat();
+      node = {
+        type: 'PostfixOp',
+        operator: op.type === 'FACTORIAL' ? '!' : '%',
+        argument: node,
+      };
+    }
+    return node;
   }
 
   private parsePrimary(): ASTNode {
@@ -125,9 +148,42 @@ export class Parser {
     }
 
     if (token.type === 'IDENTIFIER') {
+      const name = token.value.toLowerCase();
+      if (['sqrt', 'abs', 'sin', 'cos', 'tan', 'log', 'ln'].includes(name)) {
+        this.eat('IDENTIFIER');
+        if (this.current().type !== 'LPAREN') {
+          throw new MathParseError(`Expected '(' after function '${name}'`, this.current().position);
+        }
+        this.eat('LPAREN');
+        const argument = this.parseExpression();
+        if (this.current().type !== 'RPAREN') {
+          throw new MathParseError(`Expected ')' after argument of '${name}'`, this.current().position);
+        }
+        this.eat('RPAREN');
+        return {
+          type: 'FunctionCall',
+          name: name as FunctionCallNode['name'],
+          argument,
+        };
+      }
+
       this.eat('IDENTIFIER');
-      const identifier: IdentifierNode = { type: 'Identifier', name: token.value.toLowerCase() };
+      const identifier: IdentifierNode = { type: 'Identifier', name };
       return identifier;
+    }
+
+    if (token.type === 'PIPE') {
+      this.eat('PIPE');
+      const argument = this.parseExpression();
+      if (this.current().type !== 'PIPE') {
+        throw new MathParseError('Missing closing pipe | for absolute value', this.current().position);
+      }
+      this.eat('PIPE');
+      return {
+        type: 'FunctionCall',
+        name: 'abs',
+        argument,
+      };
     }
 
     if (token.type === 'LPAREN') {
