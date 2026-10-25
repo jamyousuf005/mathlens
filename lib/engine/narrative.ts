@@ -20,9 +20,16 @@ export interface CompleteNarrative {
 }
 
 function cleanMath(expr: string): string {
-  return expr
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1) / ($2)')
+  let cleaned = expr;
+  // Repeat fraction unwrapping in case of nested constructs or simple brackets
+  for (let k = 0; k < 5; k++) {
+    if (!cleaned.includes('\\frac')) break;
+    cleaned = cleaned.replace(/\\frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, '($1) / ($2)');
+  }
+  cleaned = cleaned.replace(/\\frac/g, '');
+  return cleaned
     .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
+    .replace(/\\sqrt/g, '√')
     .replace(/\\Delta/g, 'Δ')
     .replace(/\\pm/g, '±')
     .replace(/\\times/g, '×')
@@ -32,7 +39,9 @@ function cleanMath(expr: string): string {
     .replace(/\\}/g, '}')
     .replace(/\\quad/g, ' ')
     .replace(/\\,/g, ' ')
+    .replace(/\\;/g, ' ')
     .replace(/\\\\/g, '')
+    .replace(/\\left|\\right/g, '')
     .trim();
 }
 
@@ -87,6 +96,14 @@ export function generateCompleteNarrative(
     case 'Arithmetic':
       strategyOverview =
         'We evaluate this numerical expression strictly following the standard order of operations (PEMDAS/BODMAS), simplifying grouped sub-expressions and executing exact rational arithmetic.';
+      break;
+    case 'Differentiation':
+      strategyOverview =
+        'We differentiate the function term by term applying the power rule, constant multiple rule, and sum rule of differential calculus.';
+      break;
+    case 'Integration':
+      strategyOverview =
+        'We evaluate the integral term by term applying the power rule for integration, constant multiple rule, and sum rule of integral calculus.';
       break;
     case 'Algebraic Identity / Factoring':
       strategyOverview =

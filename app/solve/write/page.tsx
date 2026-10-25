@@ -3,8 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { solveMathProblem } from "@/lib/engine/solver";
 import { SolutionResult } from "@/lib/engine/types";
-import { ExpressionEditor } from "@/components/solve/expression-editor";
 import { CompleteSolutionNarrative } from "@/components/solve/complete-solution-narrative";
+import { MathRenderer } from "@/components/ui/MathRenderer";
 import { saveHistory, setHistoryFavorite } from "@/lib/history";
 
 type StrokePoint = { x: number; y: number; time: number };
@@ -14,7 +14,6 @@ export default function WriteSolvePage() {
   const [strokeWidth, setStrokeWidth] = useState<"fine" | "medium" | "bold">("medium");
   const [gridVisible, setGridVisible] = useState(true);
   const [isStarred, setIsStarred] = useState(false);
-  const [copiedType, setCopiedType] = useState<"latex" | "text" | null>(null);
   const [isSolving, setIsSolving] = useState(false);
   const [solvingFeedback, setSolvingFeedback] = useState<string | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
@@ -23,20 +22,51 @@ export default function WriteSolvePage() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [hasSolution, setHasSolution] = useState(false);
+  const [isEditingExpression, setIsEditingExpression] = useState(false);
+  const [hasSolution, setHasSolution] = useState(true);
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
 
   // Math & OCR State
   const [expression, setExpression] = useState<string>("x^2 - 5x + 6 = 0");
-  const [recognizedText, setRecognizedText] = useState<string>("");
+  const [editBuffer, setEditBuffer] = useState<string>("x^2 - 5x + 6 = 0");
+  const [recognizedText, setRecognizedText] = useState<string>("x^2 - 5x + 6 = 0");
   const [latexExpr, setLatexExpr] = useState<string>("x^2 - 5x + 6 = 0");
   const [activeEngine, setActiveEngine] = useState<string>("Gemini 2.5 Flash Vision");
-  const [confidence, setConfidence] = useState<number>(99.8);
-  const [solution, setSolution] = useState<SolutionResult>(() => {
+  const [confidence, setConfidence] = useState<number | null>(99.8);
+  const [solution, setSolution] = useState<SolutionResult | null>(() => {
     const s = solveMathProblem("x^2 - 5x + 6 = 0");
     return { ...s, executionTimeMs: 0.5 };
   });
+
+  // Refresh persistence: Restore user's last ink problem from history if available
+  useEffect(() => {
+    import("@/lib/history").then(({ getLatestHistoryItem }) => {
+      getLatestHistoryItem("pad").then((latest) => {
+        if (!latest) return;
+        setExpression(latest.expression);
+        setEditBuffer(latest.expression);
+        setRecognizedText(latest.recognizedText || latest.expression);
+        setLatexExpr(latest.latex);
+        setSolution({
+          success: true,
+          problemType: latest.problemType as SolutionResult["problemType"],
+          normalizedExpression: latest.expression,
+          latexExpression: latest.latex,
+          finalAnswerPlain: latest.finalAnswerPlain,
+          finalAnswerLatex: latest.finalAnswerLatex,
+          exactAnswer: latest.finalAnswerPlain,
+          steps: latest.steps,
+          isVerified: latest.isVerified,
+          verificationDetails: { lhsValue: 0, rhsValue: 0, residualNorm: 0, status: "Restored after refresh" },
+          executionTimeMs: 0,
+        });
+        setConfidence(100.0);
+        setHistoryId(latest.id);
+        setIsStarred(latest.favorite);
+      }).catch(() => {});
+    });
+  }, []);
 
   // Canvas Ref for Interactive Inking
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -181,26 +211,6 @@ export default function WriteSolvePage() {
     syncHistoryButtons();
   };
 
-  const handleCopyLatex = async () => {
-    try {
-      await navigator.clipboard.writeText(latexExpr);
-      setCopiedType("latex");
-      setTimeout(() => setCopiedType(null), 1800);
-    } catch {
-      // fallback
-    }
-  };
-
-  const handleCopyText = async () => {
-    try {
-      await navigator.clipboard.writeText(expression);
-      setCopiedType("text");
-      setTimeout(() => setCopiedType(null), 1800);
-    } catch {
-      // fallback
-    }
-  };
-
   const handleSolveClick = async () => {
     if (strokeCount === 0) {
       setSolveError('Write an equation on the canvas first, then read the ink.');
@@ -247,17 +257,22 @@ export default function WriteSolvePage() {
         throw new Error(geminiFailure);
       }
 
-      setRecognizedText(String(data.expression));
-      setExpression(String(data.expression));
-      setLatexExpr(String(data.latex || data.expression));
+      const recognized = String(data.expression);
+      setRecognizedText(recognized);
+      setExpression(recognized);
+      setEditBuffer(recognized);
+      setLatexExpr(String(data.latex || recognized));
       setConfidence(Number(data.confidence) || 90);
-      setActiveEngine('Gemini 2.5 Flash Vision');
+      setActiveEngine(data.provider === 'groq-vision' ? 'Groq Vision (Qwen)' : 'Gemini 2.5 Flash Vision');
+      setSolution(null);
       setHasSolution(false);
-      setIsConfirming(true);
-      setSolvingFeedback('Ink recognized. Review the expression before solving.');
+      setIsConfirming(true); // Mandatory confirmation step (FR-RC-07)
+      setIsEditingExpression(false);
       setHistoryNotice(null);
       setHistoryId(null);
       setIsStarred(false);
+      setSolvingFeedback('Ink recognized. Please review and confirm to solve.');
+      setIsSolving(false);
       return;
     } catch (err) {
       geminiFailure = err instanceof Error ? err.message : geminiFailure;
@@ -289,52 +304,63 @@ export default function WriteSolvePage() {
 
       setRecognizedText(localText);
       setExpression(normalized);
+      setEditBuffer(normalized);
       setLatexExpr(normalized);
       setConfidence(70);
       setActiveEngine('Local Tesseract fallback');
+      setSolution(null);
       setHasSolution(false);
-      setIsConfirming(true);
+      setIsConfirming(true); // Mandatory confirmation step (FR-RC-07)
+      setIsEditingExpression(false);
       setHistoryNotice(null);
       setHistoryId(null);
       setIsStarred(false);
-      setSolveError('Gemini OCR was unavailable. Review the local Tesseract result before solving.');
-      setSolvingFeedback('Local OCR finished. Confirm the expression to solve.');
+      setSolvingFeedback('Local recognition complete. Please review and confirm to solve.');
+      setSolveError('Gemini OCR was unavailable. Local Tesseract result was used.');
     } catch {
       setSolveError(geminiFailure);
       setSolvingFeedback(null);
     } finally {
-      setTimeout(() => setIsSolving(false), 700);
+      setIsSolving(false);
+      setSolvingFeedback(null);
     }
   };
 
-  const handleConfirmExpression = async (result: SolutionResult) => {
-    setSolution(result);
-    setLatexExpr(result.normalizedExpression);
+  const handleConfirmEdit = async () => {
+    const sol = solveMathProblem(editBuffer);
+    if (!sol.success) {
+      setSolveError(sol.error || 'The expression could not be solved. Check the syntax.');
+      return;
+    }
+
+    setExpression(sol.normalizedExpression);
+    setEditBuffer(sol.normalizedExpression);
+    setLatexExpr(sol.latexExpression);
+    setSolution(sol);
     setHasSolution(true);
+    setIsEditingExpression(false);
     setIsConfirming(false);
     setSolveError(null);
-    setSolvingFeedback(`Solved in ${result.executionTimeMs.toFixed(1)}ms`);
+    setSolvingFeedback(`Solved: ${sol.finalAnswerPlain}`);
 
     try {
       const record = await saveHistory({
-        expression: result.normalizedExpression,
-        latex: result.normalizedExpression,
-        recognizedText,
-        problemType: result.problemType,
         inputType: 'pad',
-        finalAnswerPlain: result.finalAnswerPlain,
-        finalAnswerLatex: result.finalAnswerLatex,
-        isVerified: result.isVerified,
-        steps: result.steps,
+        expression: sol.normalizedExpression,
+        recognizedText: expression,
+        latex: sol.latexExpression,
+        problemType: sol.problemType,
+        finalAnswerPlain: sol.finalAnswerPlain,
+        finalAnswerLatex: sol.finalAnswerLatex,
+        steps: sol.steps,
+        isVerified: sol.isVerified,
       });
       setHistoryId(record.id);
-      setIsStarred(false);
+      setIsStarred(record.favorite);
       setHistoryNotice('Confirmed result saved to Notebook.');
     } catch {
-      setHistoryId(null);
-      setHistoryNotice('Could not save this result to Notebook.');
+      setHistoryNotice('Solved, but local history is unavailable in this browser.');
     }
-    setTimeout(() => setSolvingFeedback(null), 1600);
   };
 
   const handleToggleFavorite = async () => {
@@ -375,61 +401,33 @@ export default function WriteSolvePage() {
           <div className="flex flex-col w-full">
             <div className="w-full px-margin py-space-lg max-w-[1520px] mx-auto flex flex-col gap-space-lg">
               {/* Editorial Title & Status Header */}
-              <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md pb-space-sm border-b border-hairline">
+              <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-md border-b border-hairline pb-space-sm">
                 <div className="flex flex-col gap-1.5 max-w-3xl">
-                  <div className="flex items-center gap-space-sm flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-olive-tint-soft text-ink font-code-sm text-code-sm font-semibold tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                      METHOD 03 • VECTOR INKING CANVAS
-                    </span>
-                    <span className="font-code-sm text-code-sm text-ink-muted">CLIENT RUNTIME CAS v4.12</span>
-                  </div>
                   <h1 className="font-headline-xl text-headline-xl text-ink tracking-tight font-semibold">
-                    Write Mathematical Problem &amp; Solve
+                    Write Problem &amp; Solve
                   </h1>
                   <p className="font-body-lg text-body-lg text-ink-muted leading-relaxed">
-                    Sketch or write mathematical equations with low-latency pointer inking, canvas snapshot undo/redo, and a deterministic local solution.
+                    Write or sketch mathematical expressions directly on the interactive canvas for instant recognition and step-by-step solving.
                   </p>
                 </div>
+              </section>
 
-                {/* Live Engine Telemetry Strip */}
-                <div className="flex items-center gap-space-md bg-surface p-2.5 rounded-xl border border-hairline shadow-card self-start lg:self-auto">
-                  <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
-                    <span className="font-caption text-caption text-ink-muted uppercase">Execution Target</span>
-                    <span className="font-code-sm text-code-sm font-bold text-ink flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-sage"></span>
-                      TS Deterministic
-                    </span>
-                  </div>
-                  <div className="flex flex-col px-space-xs border-r border-hairline pr-space-md">
-                    <span className="font-caption text-caption text-ink-muted uppercase">Latency</span>
-                    <span className="font-code-sm text-code-sm font-bold text-ink">{solution.executionTimeMs} ms</span>
-                  </div>
-                  <div className="flex flex-col px-space-xs">
-                    <span className="font-caption text-caption text-ink-muted uppercase">Ink Privacy</span>
-                    <span className="font-code-sm text-code-sm font-bold text-secondary flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">shield</span> AI OCR only
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Main Academic Split View */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
-                {/* LEFT COLUMN: Vector Inking Writepad (52%) */}
-                <div className="lg:col-span-6 xl:col-span-6 flex flex-col gap-space-md">
+              {/* Main Two-Column Split Layout */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
+                {/* LEFT COLUMN: Vector Inking Writepad */}
+                <section className="xl:col-span-6 flex flex-col gap-space-md">
                   {/* Canvas Studio Outer Card */}
-                  <div className="bg-surface rounded-2xl border border-hairline shadow-sm overflow-hidden flex flex-col">
+                  <div className="bg-surface rounded-2xl border border-hairline shadow-card overflow-hidden flex flex-col">
                     {/* Inking Top Toolbar */}
                     <div className="px-space-md py-space-sm bg-surface-container-low border-b border-hairline flex flex-wrap items-center justify-between gap-space-sm">
                       {/* Tool Selection & Stroke Weight */}
                       <div className="flex items-center gap-space-xs">
-                        <div className="flex items-center bg-surface rounded-full p-0.5 border border-hairline">
+                        <div className="flex items-center bg-surface rounded-xl p-0.5 border border-hairline">
                           <button
                             onClick={() => setTool('pen')}
-                            className={`px-2.5 py-1 rounded-full font-caption text-caption font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg font-body-sm text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                               tool === 'pen'
-                                ? 'bg-[#1E231D] text-[#FFFFFF] shadow-sm'
+                                ? 'bg-ink text-surface shadow-xs'
                                 : 'text-ink-muted hover:text-ink hover:bg-transparent'
                             }`}
                             id="tool-pen"
@@ -440,9 +438,9 @@ export default function WriteSolvePage() {
                           </button>
                           <button
                             onClick={() => setTool('eraser')}
-                            className={`px-2.5 py-1 rounded-full font-caption text-caption font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg font-body-sm text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                               tool === 'eraser'
-                                ? 'bg-[#1E231D] text-[#FFFFFF] shadow-sm'
+                                ? 'bg-ink text-surface shadow-xs'
                                 : 'text-ink-muted hover:text-ink hover:bg-transparent'
                             }`}
                             id="tool-eraser"
@@ -454,10 +452,10 @@ export default function WriteSolvePage() {
                         </div>
 
                         {/* Stroke Width Switcher */}
-                        <div className="flex items-center bg-surface rounded-full p-1 border border-hairline ml-1 gap-1">
+                        <div className="flex items-center bg-surface rounded-xl p-1 border border-hairline ml-1 gap-1">
                           <button
                             onClick={() => setStrokeWidth('fine')}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                               strokeWidth === 'fine'
                                 ? 'bg-surface-container-high border border-hairline'
                                 : 'hover:bg-surface-container-low'
@@ -473,7 +471,7 @@ export default function WriteSolvePage() {
                           </button>
                           <button
                             onClick={() => setStrokeWidth('medium')}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                               strokeWidth === 'medium'
                                 ? 'bg-surface-container-high border border-hairline'
                                 : 'hover:bg-surface-container-low'
@@ -489,7 +487,7 @@ export default function WriteSolvePage() {
                           </button>
                           <button
                             onClick={() => setStrokeWidth('bold')}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                               strokeWidth === 'bold'
                                 ? 'bg-surface-container-high border border-hairline'
                                 : 'hover:bg-surface-container-low'
@@ -510,7 +508,7 @@ export default function WriteSolvePage() {
                       <div className="flex items-center gap-space-xs">
                         <button
                           onClick={handleUndo}
-                          className={`w-8 h-8 rounded-full border border-hairline bg-surface hover:bg-surface-container text-ink flex items-center justify-center transition-colors ${
+                          className={`w-8 h-8 rounded-lg border border-hairline bg-surface hover:bg-surface-container text-ink flex items-center justify-center transition-colors ${
                             canUndo ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'
                           }`}
                           id="undo-btn"
@@ -523,7 +521,7 @@ export default function WriteSolvePage() {
                         </button>
                         <button
                           onClick={handleRedo}
-                          className={`w-8 h-8 rounded-full border border-hairline bg-surface hover:bg-surface-container text-ink flex items-center justify-center transition-colors ${
+                          className={`w-8 h-8 rounded-lg border border-hairline bg-surface hover:bg-surface-container text-ink flex items-center justify-center transition-colors ${
                             canRedo ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'
                           }`}
                           id="redo-btn"
@@ -537,22 +535,22 @@ export default function WriteSolvePage() {
                         <div className="h-4 w-px bg-hairline mx-1"></div>
                         <button
                           onClick={() => setGridVisible(!gridVisible)}
-                          className="px-2.5 py-1 rounded-full bg-surface border border-hairline font-code-sm text-code-sm text-ink hover:bg-surface-container flex items-center gap-1.5 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-surface border border-hairline font-code-sm text-code-sm text-ink hover:bg-surface-container flex items-center gap-1.5 transition-colors cursor-pointer"
                           id="grid-toggle-btn"
                           type="button"
                         >
                           <span className={`material-symbols-outlined text-[15px] ${gridVisible ? 'text-secondary' : 'text-ink-muted'}`}>grid_4x4</span>
-                          <span className="hidden sm:inline">24mm Dot Grid</span>
+                          <span className="hidden sm:inline">Grid</span>
                         </button>
                       </div>
                     </div>
 
                     {/* Main Inking Surface Viewport */}
                     <div
-                      className="relative w-full h-[380px] sm:h-[470px] bg-surface select-none overflow-hidden cursor-crosshair"
+                      className="relative w-full h-[340px] sm:h-[400px] bg-surface select-none overflow-hidden cursor-crosshair"
                       id="ink-canvas-container"
                     >
-                      {/* Isometric / Cartesian 24mm Dot Matrix Background Pattern */}
+                      {/* Grid Pattern */}
                       {gridVisible && (
                         <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">
                           <defs>
@@ -578,7 +576,7 @@ export default function WriteSolvePage() {
                         className="absolute inset-0 w-full h-full z-10 touch-none cursor-crosshair"
                       />
 
-                      {/* Organic Sample Mathematical Ink Overlay (visible when strokes == 0 and not cleared) */}
+                      {/* Sample Mathematical Ink Overlay */}
                       {!isCleared && strokeCount === 0 && (
                         <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300 opacity-60" fill="none" viewBox="0 0 700 470" xmlns="http://www.w3.org/2000/svg">
                           <line stroke="#1E231D" strokeDasharray="4 6" strokeOpacity="0.10" strokeWidth="1.2" x1="60" x2="640" y1="270" y2="270"></line>
@@ -600,29 +598,20 @@ export default function WriteSolvePage() {
                         </svg>
                       )}
 
-                      {/* Active Bézier Recognition Node Bounding Highlights — only shown when user has drawn strokes */}
-                      {!isCleared && strokeCount > 0 && (
-                        <div className="absolute top-[148px] left-3 sm:left-[90px] right-3 sm:right-auto sm:w-[530px] h-[130px] rounded-xl border border-dashed border-amber/40 bg-amber/[0.02] pointer-events-none flex items-start justify-end p-1.5 z-20">
-                          <span className="font-code-sm text-[10px] uppercase font-bold text-amber px-1.5 py-0.5 rounded bg-surface border border-amber/30">
-                            {activeEngine} • Active
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Floating Inking Telemetry Pill (Bottom-Left) */}
-                      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 bg-surface/95 backdrop-blur-sm px-3 py-1.5 rounded-full border border-hairline shadow-sm max-w-[calc(100%-32px)]">
+                      {/* Floating Inking Status Pill */}
+                      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 bg-surface/95 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-hairline shadow-xs max-w-[calc(100%-80px)]">
                         <span className="w-2 h-2 rounded-full bg-secondary shrink-0"></span>
                         <span className="font-code-sm text-code-sm text-ink font-medium truncate">
                           {isCleared
-                            ? '0 strokes • Canvas cleared • Draw equation'
-                            : `${strokeCount} stroke${strokeCount !== 1 ? 's' : ''} • Real-time inking ready`}
+                            ? 'Canvas cleared • Draw equation'
+                            : `${strokeCount} stroke${strokeCount !== 1 ? 's' : ''} • Ready`}
                         </span>
                       </div>
 
-                      {/* Canvas Quick Clear Icon Float */}
+                      {/* Quick Clear Icon */}
                       <button
                         onClick={handleClearReset}
-                        className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-surface border border-hairline text-ink-muted hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer"
+                        className="absolute top-4 right-4 z-20 w-8 h-8 rounded-xl bg-surface border border-hairline text-ink-muted hover:text-error hover:bg-error-container/30 flex items-center justify-center transition-colors cursor-pointer shadow-xs"
                         id="quick-clear-canvas"
                         title="Clear Canvas"
                         type="button"
@@ -632,158 +621,164 @@ export default function WriteSolvePage() {
                     </div>
                   </div>
 
-                  {/* Inking Bottom Action Dock */}
-                  <div className="flex flex-col sm:flex-row items-center gap-space-sm pt-space-xs">
+                  {/* Primary Action Dock */}
+                  <div className="flex flex-col sm:flex-row items-center gap-space-sm sm:justify-start">
                     <button
                       onClick={handleSolveClick}
-                      className={`w-full sm:flex-1 h-14 rounded-full bg-amber text-ink font-headline-sm text-body-lg font-bold flex items-center justify-center gap-2.5 shadow-sm hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer ${
-                        isSolving ? 'scale-95' : ''
-                      }`}
+                      disabled={isSolving}
+                      className="w-full sm:w-auto sm:min-w-[140px] px-6 h-12 rounded-xl bg-amber text-ink font-semibold font-body-sm text-body-sm flex items-center justify-center gap-2 shadow-xs hover:brightness-105 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-70"
                       id="solve-now-btn"
                       type="button"
                     >
                       {isSolving ? (
                         <>
-                          <span className="material-symbols-outlined text-[22px] animate-spin">refresh</span>
+                          <span className="material-symbols-outlined text-[20px] animate-spin">refresh</span>
                           <span>{solvingFeedback || 'Transcribing ink...'}</span>
                         </>
                       ) : (
                         <>
-                          <span className="material-symbols-outlined text-[22px]">bolt</span>
-                          <span>Solve Problem Now</span>
-                          <span className="font-caption text-caption text-ink/75 bg-ink/10 px-2.5 py-0.5 rounded-full font-medium">Gemini AI + CAS</span>
+                          <span>Solve</span>
                         </>
                       )}
                     </button>
 
                     <button
                       onClick={handleClearReset}
-                      className="w-full sm:w-auto px-6 h-14 rounded-full bg-surface border border-hairline hover:bg-surface-container font-body-sm text-body-sm text-ink font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                      className="w-full sm:w-auto sm:min-w-[140px] px-6 h-12 rounded-xl bg-surface border border-hairline hover:bg-surface-container font-body-sm text-body-sm text-ink font-medium flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                       id="clear-reset-btn"
                       type="button"
                     >
                       <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                      <span>Clear &amp; Reset</span>
+                      <span>Refresh</span>
                     </button>
                   </div>
 
                   {(solveError || (solvingFeedback && !isSolving)) && (
-                    <p
+                    <div
                       role={solveError ? 'alert' : 'status'}
-                      className={`px-space-sm py-2 rounded-xl border font-body-sm text-body-sm ${
+                      className={`px-3.5 py-2.5 rounded-xl border font-body-sm text-sm flex items-start gap-2 ${
                         solveError
-                          ? 'bg-error-container/40 border-error/30 text-error'
+                          ? 'bg-error-container/30 border-error/30 text-error'
                           : 'bg-sage/15 border-sage/30 text-ink'
                       }`}
                     >
-                      {solveError || solvingFeedback}
-                    </p>
+                      <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">
+                        {solveError ? 'error' : 'info'}
+                      </span>
+                      <p>{solveError || solvingFeedback}</p>
+                    </div>
+                  )}
+                </section>
+
+                {/* RIGHT COLUMN: Solution & Verification Pane */}
+                <section className="xl:col-span-6 flex flex-col gap-space-md">
+                  {/* Status chip */}
+                  <div className="flex items-center justify-between flex-wrap gap-space-xs">
+                    <div className="flex items-center gap-space-xs">
+                      {confidence !== null && (
+                        <span className="rounded-full bg-secondary-fixed px-space-sm py-0.5 font-code-sm text-[10px] font-medium text-on-secondary-fixed sm:text-code-sm">
+                          Confidence: {confidence}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-secondary font-code-sm text-code-sm">
+                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                      <span>{solution ? solution.problemType : activeEngine || 'Deterministic Solver'}</span>
+                    </div>
+                  </div>
+
+                  {!expression && !solution ? (
+                    <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-hairline bg-surface p-space-xl text-center shadow-card">
+                      <div className="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center border border-hairline text-amber">
+                        <span className="material-symbols-outlined text-[26px]">draw</span>
+                      </div>
+                      <h2 className="font-headline-sm text-headline-sm font-semibold text-ink">
+                        Draw Math to Recognize &amp; Solve
+                      </h2>
+                      <p className="max-w-md font-body-sm text-body-sm text-ink-muted">
+                        Write numbers, equations, fractions, or calculus symbols on the canvas. Click &quot;Solve&quot; to transcribe strokes and confirm your formula.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Extracted Formula Card with identical Inline Edit */}
+                      <div className="bg-surface rounded-xl shadow-card p-space-md flex flex-col gap-space-sm border border-hairline">
+                    <div className="flex items-center justify-between">
+                      <span className="font-caption text-caption uppercase text-ink-muted tracking-wider">Recognized Math Expression</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingExpression(!isEditingExpression);
+                          if (!isEditingExpression) {
+                            setEditBuffer(expression);
+                          }
+                        }}
+                        className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                        <span>{isEditingExpression ? 'Close' : 'Edit'}</span>
+                      </button>
+                    </div>
+
+                    {isEditingExpression ? (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2">
+                        <input
+                          type="text"
+                          value={editBuffer}
+                          onChange={(e) => setEditBuffer(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void handleConfirmEdit();
+                            }
+                          }}
+                          className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-surface border border-hairline font-mono text-sm text-ink focus:outline-none focus:ring-1 focus:ring-amber"
+                          placeholder="e.g. 3x - 30 = 0"
+                        />
+                        <button
+                          onClick={handleConfirmEdit}
+                          className="whitespace-nowrap shrink-0 px-3.5 py-1.5 rounded-lg bg-amber text-ink font-semibold text-xs shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1"
+                          type="button"
+                        >
+                          <span>Confirm &amp; Solve</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-space-md px-space-lg rounded-xl bg-canvas/60 flex items-center justify-center text-center border border-hairline overflow-x-auto">
+                        <MathRenderer math={latexExpr || expression} block className="text-2xl text-ink md:text-3xl" />
+                      </div>
+                    )}
+                  </div>
+
+                  {isConfirming && (
+                    <div className="rounded-xl border border-amber/40 bg-amber/10 p-space-md">
+                      <p className="font-body-sm text-sm font-semibold text-ink">Confirm before solving</p>
+                      <p className="mt-1 font-body-sm text-[13px] text-ink-muted">
+                        Review the transcribed expression above and press Confirm &amp; Solve.
+                      </p>
+                    </div>
                   )}
 
-                  {/* Academic Inking Protocol Tips */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-space-sm py-2 rounded-xl bg-surface-container-low border border-hairline">
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px] text-ink-muted shrink-0">stylus_note</span>
-                      <span className="font-caption text-caption text-ink-muted">Supports Apple Pencil, Surface Pen, Wacom, and Standard Inking</span>
-                    </div>
-                    <span className="font-code-sm text-code-sm text-ink-muted uppercase shrink-0 self-end sm:self-auto">Stroke smoothing: On</span>
-                  </div>
-                </div>
+                  {solution && !isConfirming && (
+                    <div className="contents">
+                    {/* Final Solution Hero Card */}
+                    <div className="rounded-xl bg-surface p-space-lg shadow-card flex flex-col gap-space-sm relative overflow-hidden border border-hairline">
+                      <span className="font-code-sm text-code-sm uppercase tracking-widest text-amber font-semibold">
+                        Final Solution
+                      </span>
 
-                {/* RIGHT COLUMN: Solution & Verification Pane (48%) */}
-                <div className="lg:col-span-6 xl:col-span-6 flex flex-col gap-space-md">
-                  <div className="bg-surface rounded-2xl border border-hairline shadow-sm p-space-lg flex flex-col gap-space-md">
-                    {/* Top Classification Strip */}
-                    <div className="flex items-center justify-between border-b border-hairline pb-space-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-full bg-surface-container font-code-sm text-code-sm font-bold text-ink">
-                          {solution.problemType.toUpperCase()}
-                        </span>
-                        <span className="font-caption text-caption text-ink-muted">x ∈ ℝ</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-code-sm text-code-sm font-semibold">
-                        <span className="material-symbols-outlined text-[15px]">verified</span>
-                        <span>{activeEngine} • {confidence}%</span>
-                      </div>
-                    </div>
-
-                    {/* Real-Time Typeset Recognition Card */}
-                    <div className="flex flex-col gap-1.5 p-space-md bg-canvas rounded-xl border border-hairline">
-                      <div className="flex items-center justify-between">
-                        <span className="font-caption text-caption font-semibold uppercase tracking-wider text-ink-muted">Recognized Expression</span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sage/20 text-secondary font-code-sm text-code-sm font-medium">
-                          <span className="material-symbols-outlined text-[14px]">check</span>
-                          AST Validated
-                        </span>
-                      </div>
-                      <div className="py-1 overflow-x-auto">
-                        <span className="font-serif text-3xl font-normal text-ink tracking-wide select-all">
-                          {latexExpr || expression}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-ink-muted font-code-sm text-code-sm pt-1 border-t border-hairline">
-                        <span>Equation: <code className="text-ink font-semibold">{expression}</code></span>
-                        <span>•</span>
-                        <span>{solution.problemType}</span>
-                      </div>
-                    </div>
-
-                    {isConfirming && (
-                      <div className="flex flex-col gap-space-sm p-space-md bg-amber/[0.06] border border-amber/30 rounded-xl">
-                        <div className="flex items-start gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-amber">rate_review</span>
-                          <div>
-                            <p className="font-body-sm text-body-sm font-semibold text-ink">Review the recognized ink</p>
-                            <p className="font-caption text-caption text-ink-muted">
-                              OCR output is a suggestion. Correct it before the solver runs.
-                            </p>
-                          </div>
-                        </div>
-                        <ExpressionEditor
-                          value={expression}
-                          onChange={setExpression}
-                          onConfirm={handleConfirmExpression}
-                          confirmLabel="Confirm & Solve"
-                          inputId="write-expression-input"
-                          autoFocus
+                      <div className="flex flex-row items-baseline justify-between w-full gap-space-sm py-space-xs overflow-x-auto">
+                        <MathRenderer
+                          math={solution.finalAnswerLatex || solution.finalAnswerPlain}
+                          className="font-headline-lg text-headline-xl text-ink"
                         />
-                      </div>
-                    )}
-
-                    {!hasSolution && !isConfirming && (
-                      <div className="p-space-md rounded-xl bg-surface-container-low border border-dashed border-hairline text-center">
-                        <span className="material-symbols-outlined text-3xl text-ink-muted">stylus_note</span>
-                        <p className="mt-1 font-body-sm text-body-sm font-semibold text-ink">No equation solved yet</p>
-                        <p className="font-caption text-caption text-ink-muted">
-                          Write on the canvas, read the ink, then confirm the expression.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className={hasSolution && !isConfirming ? 'contents' : 'hidden'}>
-                    {/* FINAL CANONICAL ROOTS HERO BOX */}
-                    <div className="relative bg-surface rounded-xl border-2 border-amber p-space-md flex flex-col gap-space-sm bg-gradient-to-r from-surface via-surface to-primary-fixed/20 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="font-code-sm text-code-sm font-bold tracking-widest text-primary uppercase flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-amber"></span>Final Solution
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-amber/20 font-code-sm text-code-sm font-semibold text-on-primary-fixed-variant">
-                          {solution.finalAnswerLatex || solution.finalAnswerPlain}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                        <div className="font-serif text-3xl lg:text-4xl font-medium text-ink tracking-tight select-all">
-                          {solution.finalAnswerLatex || solution.finalAnswerPlain}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 p-2 rounded-lg bg-sage/15 border border-sage/30 text-ink">
-                        <span className="material-symbols-outlined text-secondary text-[18px]">verified</span>
-                        <span className="font-caption text-caption text-ink font-semibold">
-                          {solution.isVerified ? '✓ Verified by direct check' : 'Deterministic Derivation'}
-                        </span>
+                        {solution.roots && (
+                          <span className="px-space-sm py-1 rounded bg-surface-container font-code-sm text-code-sm text-ink shrink-0">
+                            Roots: {solution.roots.length}
+                          </span>
+                        )}
                       </div>
                     </div>
-
 
                     {/* Complete Written Solution in Text Form (One Go) */}
                     <CompleteSolutionNarrative
@@ -792,106 +787,52 @@ export default function WriteSolvePage() {
                       idPrefix="write-narrative"
                     />
 
-                    {/* Client-Side Verification Terminal */}
-                    <div className="flex flex-col gap-2 p-space-sm bg-ink rounded-xl text-surface">
-                      <div className="flex items-center justify-between px-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${solution.isVerified ? 'bg-sage' : 'bg-amber'}`}></span>
-                          <span className="font-code-sm text-code-sm text-surface/80 font-semibold uppercase tracking-wider">Deterministic Identity Check</span>
-                        </div>
-                        <span className="font-code-sm text-[11px] text-surface/50">TS Kernel</span>
-                      </div>
-                      <div className="p-2.5 rounded bg-surface/5 font-code-sm text-code-sm flex flex-col gap-1.5 text-surface/90 border border-surface/10 select-all overflow-x-auto">
-                        <div className="flex items-center gap-2">
-                          <span className={solution.isVerified ? 'text-sage font-bold' : 'text-amber font-bold'}>
-                            {solution.isVerified ? 'PASS' : 'CHECK'}
-                          </span>
-                          <span className="break-all">f(x) = {solution.normalizedExpression}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-surface/60 font-bold">-</span>
-                          <span>
-                            LHS = {solution.verificationDetails.lhsValue} | RHS = {solution.verificationDetails.rhsValue} | residual = {solution.verificationDetails.residualNorm.toExponential(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Row & Export Tools */}
-                    <div className="flex flex-wrap items-center justify-between gap-space-xs pt-1 border-t border-hairline">
-                      <div className="flex flex-wrap items-center gap-space-xs">
-                        <button
-                          onClick={handleCopyLatex}
-                          className="px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-ink font-code-sm text-code-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                          id="copy-latex-btn"
-                          type="button"
-                        >
-                          <span className={`material-symbols-outlined text-[15px] ${copiedType === 'latex' ? 'text-secondary' : ''}`}>
-                            {copiedType === 'latex' ? 'check' : 'content_copy'}
-                          </span>
-                          <span>{copiedType === 'latex' ? 'Copied LaTeX!' : 'Copy LaTeX'}</span>
-                        </button>
-
-                        <button
-                          onClick={handleCopyText}
-                          className="px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high text-ink font-code-sm text-code-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                          id="copy-text-btn"
-                          type="button"
-                        >
-                          <span className={`material-symbols-outlined text-[15px] ${copiedType === 'text' ? 'text-secondary' : ''}`}>
-                            {copiedType === 'text' ? 'check' : 'article'}
-                          </span>
-                          <span>{copiedType === 'text' ? 'Copied Text!' : 'Copy Plaintext'}</span>
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-space-xs">
+                    {/* Utility Action Bar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-space-xs w-full">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
                         <button
                           onClick={handleToggleFavorite}
                           disabled={!historyId}
-                          className={`p-2 rounded-full border border-hairline hover:bg-surface-container text-ink transition-colors ${
+                          className={`w-10 h-10 rounded-xl bg-surface hover:bg-surface-container shadow-xs text-ink flex items-center justify-center transition-colors border border-hairline shrink-0 ${
                             historyId ? 'cursor-pointer' : 'opacity-40 cursor-not-allowed'
-                          }`}
-                          id="star-proof-btn"
+                          } ${isStarred ? 'text-amber' : ''}`}
+                          id="star-btn"
                           title={historyId ? 'Favorite in Notebook' : 'Solve to save to Notebook'}
                           type="button"
                           aria-pressed={isStarred}
                         >
                           <span
-                            className={`material-symbols-outlined text-[18px] ${
-                              isStarred ? 'text-amber' : ''
-                            }`}
+                            className="material-symbols-outlined text-[18px]"
                             style={{ fontVariationSettings: isStarred ? "'FILL' 1" : "'FILL' 0" }}
                           >
-                            star
+                            {isStarred ? 'star' : 'star_border'}
                           </span>
                         </button>
 
                         <button
-                          onClick={() => {
-                            if (typeof window !== 'undefined') {
-                              window.print();
-                            }
-                          }}
-                          className="px-3.5 py-1.5 rounded-full bg-surface border border-hairline hover:bg-surface-container font-body-sm text-body-sm font-semibold text-ink flex items-center gap-1.5 transition-colors cursor-pointer"
-                          id="export-pdf-btn"
+                          onClick={handleSolveClick}
+                          className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-amber text-ink font-body-sm text-xs sm:text-body-sm font-semibold flex items-center justify-center gap-1.5 hover:brightness-105 active:scale-95 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                          id="solve-another-btn"
                           type="button"
                         >
-                          <span className="material-symbols-outlined text-[17px]">picture_as_pdf</span>
-                          <span>Export PDF</span>
+                          <span>Re-run</span>
+                          <span className="material-symbols-outlined text-[16px]">refresh</span>
                         </button>
                       </div>
                     </div>
-                    </div>
+
                     {historyNotice && (
                       <p role="status" className="font-code-sm text-[11px] text-ink-muted">
                         {historyNotice}
                       </p>
                     )}
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                  )}
+              </>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
   );
 }

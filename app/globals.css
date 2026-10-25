@@ -226,7 +226,12 @@
     padding: 0;
     background-color: #FCF9EA;
     color: #1E231D;
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   }
+}
+
+.font-serif {
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif !important;
 }
 
 /* Hide scrollbar while preserving scroll functionality */

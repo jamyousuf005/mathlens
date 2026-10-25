@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { solveMathProblem } from '@/lib/engine/solver';
 import { checkRateLimit } from '@/lib/rate-limit';
 
+import { getClientIp } from '@/lib/client-ip';
+
 const SolveRequestSchema = z.object({
   expression: z.string().min(1, 'Expression is required').max(300, 'Expression is too long'),
   angleMode: z.enum(['radians', 'degrees']).optional().default('radians'),
@@ -10,7 +12,7 @@ const SolveRequestSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    const ip = getClientIp(req);
     const rate = checkRateLimit(`solve:${ip}`, 60, 60_000);
     if (!rate.success) {
       return NextResponse.json(

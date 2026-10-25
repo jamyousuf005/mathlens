@@ -92,6 +92,8 @@ export interface SolutionResult {
     | 'Quadratic Equation'
     | 'Linear Equation'
     | 'System of Linear Equations'
+    | 'Differentiation'
+    | 'Integration'
     | 'Arithmetic'
     | 'Algebraic Simplification'
     | 'Algebraic Identity / Factoring'

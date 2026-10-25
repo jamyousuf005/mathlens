@@ -49,3 +49,6 @@ skills-lock.json
 
 README.md
 
+# tests
+tests/
+vitest.config.ts

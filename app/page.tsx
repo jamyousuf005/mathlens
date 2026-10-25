@@ -2,15 +2,12 @@
 
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   PenTool,
   Camera,
   Upload,
   Keyboard,
   ArrowRight,
-  ShieldCheck,
-  WifiOff,
   Undo2,
   Redo2,
   Trash2,
@@ -72,15 +69,10 @@ const BENCHMARKS: Benchmark[] = [
 
 export default function Home() {
   const [activeModality, setActiveModality] = useState<'write' | 'camera' | 'file' | 'typed'>('write');
-  const router = useRouter();
 
   const handleModalityChange = (value: string) => {
     const modality = value as 'write' | 'camera' | 'file' | 'typed';
     setActiveModality(modality);
-    if (modality === 'write') router.push('/solve/write');
-    else if (modality === 'camera') router.push('/solve/capture');
-    else if (modality === 'typed') router.push('/solve/type');
-    else router.push('/solve/upload');
   };
   const [selectedBenchmark, setSelectedBenchmark] = useState<Benchmark>(BENCHMARKS[0]);
   const [runtimeMs, setRuntimeMs] = useState<number | null>(null);
@@ -257,8 +249,21 @@ export default function Home() {
                     </TabsList>
                   </div>
 
-                  {/* System Status Indicator */}
-                 
+                  <Link
+                    href={
+                      activeModality === 'write'
+                        ? '/solve/write'
+                        : activeModality === 'camera'
+                        ? '/solve/capture'
+                        : activeModality === 'typed'
+                        ? '/solve/type'
+                        : '/solve/upload'
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber hover:brightness-105 text-ink font-semibold text-xs transition-colors shrink-0 shadow-xs"
+                  >
+                    <span>Open Workspace</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </Tabs>
 
@@ -469,7 +474,7 @@ export default function Home() {
                   </h2>
                 </div>
                 <div className="text-ink-muted font-mono text-[11px] sm:text-xs">
-                  34 Comprehensive Test Suites Passed
+                  200 Golden Problem Suite Verified (100% Passed)
                 </div>
               </div>
 
@@ -502,7 +507,7 @@ export default function Home() {
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
                       <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Speed &amp; Latency</td>
                       <td className="py-3 sm:py-4 px-3 sm:px-4 text-ink-muted bg-error-container/10">Slow 3-6 second cloud waiting time</td>
-                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Instant browser calculation (under 1ms)</td>
+                      <td className="py-3 sm:py-4 px-3 sm:px-4 font-semibold text-ink bg-olive-tint-soft/50">Instant browser calculation (typically &lt; 2ms)</td>
                     </tr>
                     <tr className="hover:bg-surface-container-low/40 transition-colors">
                       <td className="py-3 sm:py-4 px-3 sm:px-4 font-medium text-ink">Privacy</td>

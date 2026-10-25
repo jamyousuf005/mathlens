@@ -109,9 +109,9 @@ export function ExpressionEditor({
         )}
       </div>
       <MathKeyboard onInsert={insertAtCursor} onBackspace={backspaceAtCursor} />
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-1">
         <p
-          className={`font-code-sm text-[11px] ${canSolve ? 'text-secondary' : 'text-error'}`}
+          className={`font-code-sm text-xs sm:text-[11px] ${canSolve ? 'text-secondary' : 'text-error'}`}
           role="status"
           aria-live="polite"
         >
@@ -124,7 +124,7 @@ export function ExpressionEditor({
             if (parsed?.success) onConfirm(parsed);
           }}
           disabled={!canSolve || disabled}
-          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-amber px-4 font-body-sm text-sm font-semibold text-ink shadow-sm transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full sm:w-auto flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl sm:rounded-full bg-amber px-5 font-body-sm text-sm font-semibold text-ink shadow-xs transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
           <span className="material-symbols-outlined text-[18px]">bolt</span>
           {confirmLabel}

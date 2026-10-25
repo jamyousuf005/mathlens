@@ -107,14 +107,16 @@ export async function saveHistory(input: NewHistoryItem): Promise<HistoryItem> {
         problemType: record.problemType,
         finalAnswerPlain: record.finalAnswerPlain,
         finalAnswerLatex: record.finalAnswerLatex,
+        isVerified: record.isVerified,
         answer: {
           exact: [record.finalAnswerPlain],
           verified: record.isVerified,
         },
-        steps: record.steps.map((s) => ({
+        steps: record.steps.map((s, idx) => ({
           rule: s.rule || 'Math Rule',
           description: s.description || '',
-          before: s.mathExpression || '',
+          mathExpression: s.mathExpression || '',
+          before: idx === 0 ? (record.expression || '') : (record.steps[idx - 1]?.mathExpression || s.title || ''),
           after: s.mathExpression || '',
         })),
         favorite: record.favorite,
@@ -156,3 +158,10 @@ export async function setHistoryFavorite(id: string, favorite: boolean): Promise
   if (!item) return;
   await requestResult(store.put({ ...item, favorite }));
 }
+
+export async function getLatestHistoryItem(inputType?: HistoryInputType): Promise<HistoryItem | null> {
+  const items = await listHistory();
+  if (!inputType) return items[0] ?? null;
+  return items.find((item) => item.inputType === inputType) ?? null;
+}
+

@@ -1,5 +1,5 @@
 import { MathParseError } from './errors';
-import { ASTNode, BinaryOpNode, EquationNode, FunctionCallNode, IdentifierNode, NumberNode, PostfixOpNode, Token, UnaryOpNode } from './types';
+import { ASTNode, BinaryOpNode, EquationNode, FunctionCallNode, IdentifierNode, NumberNode, Token, UnaryOpNode } from './types';
 
 function validateTokenSequence(tokens: Token[]): void {
   for (let i = 0; i < tokens.length - 1; i++) {

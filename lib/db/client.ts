@@ -1,27 +1,26 @@
 import { MongoClient, Db } from 'mongodb';
 
-const rawUri = process.env.MONGODB_URI;
+const rawUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/mathlens';
 
-if (!rawUri && process.env.NODE_ENV === 'production') {
+if (!process.env.MONGODB_URI && process.env.NODE_ENV === 'production') {
   throw new Error('MONGODB_URI environment variable is required in production.');
 }
 
-function cleanMongoUri(raw: string): string {
-  let cleaned = raw.trim();
-  // Strip any accidental database name appended to w=majority parameter
-  cleaned = cleaned.replace(/w=majority\/[a-zA-Z0-9_-]+/g, 'w=majority');
-  // Ensure database path is well-formed if host has trailing slash before query
-  const [beforeQuery, ...queryParts] = cleaned.split('?');
-  const query = queryParts.join('?');
-  const parts = beforeQuery.split('/');
-  // mongodb+srv://host or mongodb+srv://host/
-  if (!parts[3] || parts[3] === '') {
-    cleaned = parts.slice(0, 3).join('/') + '/mathlens' + (query ? '?' + query : '');
+/**
+ * Robustly parses MongoDB URI and extracts database name and connection string.
+ */
+function parseMongoUri(raw: string): { uri: string; dbName: string } {
+  try {
+    const parsed = new URL(raw.replace(/^mongodb\+srv:\/\//, 'http://').replace(/^mongodb:\/\//, 'http://'));
+    const pathname = parsed.pathname.replace(/^\//, '').split('/')[0]?.trim();
+    const dbName = pathname && !pathname.includes('?') ? pathname : 'mathlens';
+    return { uri: raw, dbName };
+  } catch {
+    return { uri: raw, dbName: 'mathlens' };
   }
-  return cleaned;
 }
 
-const connectionUri = cleanMongoUri(rawUri || 'mongodb://localhost:27017/mathlens');
+const { uri: connectionUri, dbName: targetDbName } = parseMongoUri(rawUri);
 
 interface MongoCache {
   client: MongoClient;
@@ -41,15 +40,27 @@ function getDatabaseInstance(): MongoCache {
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 5000,
   });
-  // Synchronous client instance, driver connects automatically on first command
-  const db = client.db('mathlens');
+
+  // Use the parsed database name from the connection string or fallback to 'mathlens'
+  const db = client.db(targetDbName);
   const instance = { client, db };
 
-  // Cache globally across all environments (including serverless lambda cold starts)
   global._mongoCache = instance;
+
+  // Asynchronously ensure indexes for problems collection (userId, createdAt, text search)
+  void (async () => {
+    try {
+      const problems = db.collection('problems');
+      await problems.createIndex({ userId: 1, createdAt: -1 });
+      await problems.createIndex({ finalExpression: 'text' });
+    } catch {
+      // Indexes may already exist or DB is offline during local test runs
+    }
+  })();
 
   return instance;
 }
 
 export const { client: mongoClient, db: mongoDb } = getDatabaseInstance();
 export default mongoDb;
+

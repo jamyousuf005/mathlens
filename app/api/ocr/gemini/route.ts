@@ -20,12 +20,14 @@ const GeminiOcrResultSchema = z.object({
 });
 
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
-    // Protect OCR quota: max 30 OCR requests per minute per IP
-    const rate = checkRateLimit(`ocr:${ip}`, 30, 60_000);
+    const clientIp = getClientIp(req);
+
+    // Protect OCR quota: max 30 OCR requests per minute per client
+    const rate = checkRateLimit(`ocr:${clientIp}`, 30, 60_000);
     if (!rate.success) {
       return NextResponse.json(
         { error: 'Too many OCR requests. Please slow down and try again shortly.' },
@@ -33,11 +35,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const groqApiKey = process.env.GROQ_API_KEY;
+
+    if (!geminiApiKey && !groqApiKey) {
       return NextResponse.json(
-        { error: 'GEMINI_API_KEY is not configured on the server' },
-        { status: 500 }
+        { error: 'No OCR vision provider API keys configured on the server' },
+        { status: 503 }
       );
     }
 
@@ -62,8 +66,6 @@ export async function POST(req: NextRequest) {
     // Sanitize base64 (strip data URI prefix if provided)
     const base64Data = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
 
-    const ai = new GoogleGenAI({ apiKey });
-
     const systemPrompt = `You are a high-precision Mathematical OCR and Formula Detection engine.
 Your objective is to examine an image of handwritten notes or printed math worksheets and extract the exact mathematical problem.
 
@@ -76,15 +78,17 @@ Strict extraction rules:
 ${ocrHint ? `Local OCR tentative hint: "${ocrHint}"` : ''}
 `;
 
-    const targetModel = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+    // Spec default model is gemini-2.5-flash
+    const targetModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
     let rawResponseText = '';
     let providerUsed = 'gemini-vision';
 
-    // 1. Attempt Gemini Vision (Primary + secondary model)
-    try {
+    // 1. Attempt Gemini Vision with a 15-second timeout
+    if (geminiApiKey) {
       try {
-        const response = await ai.models.generateContent({
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const geminiPromise = ai.models.generateContent({
           model: targetModel,
           contents: [
             {
@@ -105,46 +109,33 @@ ${ocrHint ? `Local OCR tentative hint: "${ocrHint}"` : ''}
             temperature: 0.1,
           },
         });
+
+        // 15-second abort guard to prevent stalled connections
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini OCR request timed out after 15s')), 15_000)
+        );
+
+        const response = await Promise.race([geminiPromise, timeoutPromise]);
         rawResponseText = response.text ? response.text.trim() : '';
-      } catch (primaryErr: unknown) {
-        console.warn(`Primary Gemini model ${targetModel} failed, trying fallback:`, primaryErr);
-        const fallbackResponse = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: systemPrompt },
-                {
-                  inlineData: {
-                    data: base64Data,
-                    mimeType,
-                  },
-                },
-              ],
-            },
-          ],
-          config: {
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-          },
-        });
-        rawResponseText = fallbackResponse.text ? fallbackResponse.text.trim() : '';
+      } catch (geminiError: unknown) {
+        console.warn('Gemini OCR primary attempt failed, evaluating fallback:', geminiError);
       }
-    } catch (geminiError: unknown) {
-      console.warn('Gemini OCR unavailable, attempting Groq fallback:', geminiError);
     }
 
-    // 2. Groq Vision Fallback if Gemini failed or returned nothing
-    if (!rawResponseText && process.env.GROQ_API_KEY) {
+    // 2. Groq Vision Fallback if Gemini failed, timed out, or key was missing
+    if (!rawResponseText && groqApiKey) {
       try {
         const groqModel = process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+            'Authorization': `Bearer ${groqApiKey}`,
             'Content-Type': 'application/json',
           },
+          signal: controller.signal,
           body: JSON.stringify({
             model: groqModel,
             max_tokens: 300,
@@ -168,6 +159,8 @@ ${ocrHint ? `Local OCR tentative hint: "${ocrHint}"` : ''}
             ],
           }),
         });
+
+        clearTimeout(timeoutId);
 
         if (groqRes.ok) {
           const groqData = await groqRes.json();
@@ -196,22 +189,21 @@ ${ocrHint ? `Local OCR tentative hint: "${ocrHint}"` : ''}
     try {
       parsedResult = GeminiOcrResultSchema.parse(JSON.parse(rawResponseText));
     } catch {
-      const cleaned = rawResponseText.replace(/```json|```/g, '').trim();
-      try {
-        parsedResult = GeminiOcrResultSchema.parse(JSON.parse(cleaned));
-      } catch {
-        const fallback = GeminiOcrResultSchema.safeParse({
-          expression: cleaned,
-          latex: cleaned,
-          confidence: 0.85,
-        });
-        if (!fallback.success) {
+      const jsonMatch = rawResponseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsedResult = GeminiOcrResultSchema.parse(JSON.parse(jsonMatch[0]));
+        } catch {
           return NextResponse.json(
-            { error: 'OCR service returned an unusable result' },
+            { error: 'OCR service returned an invalid JSON schema' },
             { status: 502 }
           );
         }
-        parsedResult = fallback.data;
+      } else {
+        return NextResponse.json(
+          { error: 'OCR service returned non-structured response' },
+          { status: 502 }
+        );
       }
     }
 

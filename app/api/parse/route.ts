@@ -4,6 +4,7 @@ import { normalizeMathExpression } from '@/lib/engine/normalizer';
 import { tokenize } from '@/lib/engine/lexer';
 import { Parser } from '@/lib/engine/parser';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
 
 const ParseRequestSchema = z.object({
   expression: z.string().min(1, 'Expression is required').max(300, 'Expression is too long'),
@@ -11,7 +12,7 @@ const ParseRequestSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    const ip = getClientIp(req);
     const rate = checkRateLimit(`parse:${ip}`, 60, 60_000);
     if (!rate.success) {
       return NextResponse.json(
@@ -33,12 +34,19 @@ export async function POST(req: NextRequest) {
     const tokens = tokenize(normalized);
     const ast = new Parser(tokens).parse();
 
+    // Perform semantic classification using the CAS engine
+    const { solveMathProblem } = await import('@/lib/engine/solver');
+    const dryRun = solveMathProblem(normalized);
+
     return NextResponse.json({
       ok: true,
       normalizedExpression: normalized,
       astType: ast.type,
       tokensCount: tokens.length - 1, // exclude EOF
-      problemType: ast.type === 'Equation' ? 'Equation' : 'Expression',
+      problemType: dryRun.problemType,
+      isSolvable: dryRun.success,
+      latexExpression: dryRun.latexExpression,
+      variable: (dryRun as { variable?: string }).variable || 'x',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Parse error';

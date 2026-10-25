@@ -26,10 +26,9 @@ export function normalizeMathExpression(raw: string): string {
   // or when explicitly using the cross symbols (✝, †), preserving algebraic variable 't' (e.g. 5*t, v*t, t^2)
   s = s.replace(/(\d)\s*[tT]\s*(\d)/g, '$1+$2');
   s = s.replace(/([0-9a-zA-Z)])\s*[✝†]\s*([0-9a-zA-Z(])/g, '$1+$2');
-  // Only replace colon if between symbols and no equals present
-  if (!s.includes('=')) {
-    s = s.replace(/([0-9a-zA-Z)])\s*[:]\s*([0-9a-zA-Z(])/g, '$1=$2');
-  }
+  // Only replace colon between expressions as division / ratio (e.g. 2:3 -> 2/3)
+  s = s.replace(/([0-9a-zA-Z)])\s*:\s*([0-9a-zA-Z(])/g, '$1/$2');
+
   // Underscore or tilde mistaken for minus
   s = s.replace(/[_~]/g, '-');
   // Common typo for equals sign: double minus '--' or '=='
@@ -40,31 +39,33 @@ export function normalizeMathExpression(raw: string): string {
   s = s.replace(/÷/g, '/');
   s = s.replace(/[−–—]/g, '-');
   s = s.replace(/[·•]/g, '*');
-  s = s.replace(/√\s*(\d+|\([^)Sync]+\))/g, 'sqrt($1)');
-  s = s.replace(/√/g, 'sqrt');
+  s = s.replace(/[√\u221A]\s*(\([^)]+\))/g, 'sqrt$1');
+  s = s.replace(/[√\u221A]\s*(\d+(\.\d+)?)/g, 'sqrt($1)');
+  s = s.replace(/[√\u221A]/g, 'sqrt');
 
   // 4. Common OCR alphanumeric confusion
-  // Letter O/o next to digits or = -> 0
-  s = s.replace(/(\d)[Oo]/g, '$10');
-  s = s.replace(/[Oo](\d)/g, '0$1');
-  s = s.replace(/=\s*[Oo]/g, '=0');
+  // Letter O/o next to digits (not followed by letters, e.g. not 'one' or 'out') -> 0
+  s = s.replace(/(\d)[Oo](?![a-zA-Z])/g, '$10');
+  s = s.replace(/(?<![a-zA-Z])[Oo](\d)/g, '0$1');
+  s = s.replace(/=\s*[Oo](?![a-zA-Z])/g, '=0');
 
-  // Letter l/I/| next to digits -> 1 (only if not an absolute value |...|)
-  // If there's an even number of pipes or clear pipe pattern, do not destroy pipes
+  // Letter l/I next to digits -> 1 (only when isolated, NOT when followed by letters like 'log', 'ln')
+  s = s.replace(/(\d)[lI](?![a-zA-Z])/g, '$11');
+  s = s.replace(/(?<![a-zA-Z])[lI](\d)/g, '1$1');
+
+  // Pipe | mistaken for 1 only if odd number of pipes and adjacent to digit
   const pipeCount = (s.match(/\|/g) || []).length;
   if (pipeCount % 2 !== 0) {
-    s = s.replace(/(\d)[lI|]/g, '$11');
-    s = s.replace(/[lI|](\d)/g, '1$1');
-  } else {
-    s = s.replace(/(\d)[lI]/g, '$11');
-    s = s.replace(/[lI](\d)/g, '1$1');
+    s = s.replace(/(\d)\|/g, '$11');
+    s = s.replace(/\|(\d)/g, '1$1');
   }
 
-  // Letter S/s mistaken for 5 next to numbers or after operators
-  s = s.replace(/([0-9])[Ss]/g, '$15');
+  // Letter S/s: Never replace if followed by letters (e.g. 'sin', 'sqrt', 'sec')
+  // Also in algebra, digits followed by 's' (e.g. 2s) is implicit multiplication (2*s), not 25.
+  // Only replace standalone 'S'/'s' between an operator and a digit (e.g., '+ s 4' -> '+ 5 4')
   s = s.replace(/([+\-*/=])[Ss](\d)/g, '$15$2');
 
-  // Letter Z/z mistaken for 2 next to operators or preceding variables
+  // Letter Z/z mistaken for 2 next to operators or preceding variables (e.g. '+ z 3' -> '+ 2 3')
   s = s.replace(/([+\-*/=])[Zz](\d)/g, '$12$2');
 
   // B mistaken for 8 next to digits
@@ -89,8 +90,8 @@ export function normalizeMathExpression(raw: string): string {
   // 6. If OCR produced "x2" instead of "x^2", normalize to "x^2".
   s = s.replace(/(^|[^a-zA-Z])([a-zA-Z])2(?=[+\-*/=)]|$)/g, '$1$2^2');
 
-  // 7. Lowercase algebraic variables (X -> x, Y -> y, Z -> z) preserving function names
-  s = s.replace(/\b(SQRT|ABS|SIN|COS|TAN|LOG|LN)\b/gi, (fn) => fn.toLowerCase());
+  // 7. Lowercase algebraic variables (X -> x, Y -> y, Z -> z) preserving function names and calculus keywords
+  s = s.replace(/\b(SQRT|ABS|SIN|COS|TAN|LOG|LN|INTEGRAL|INTEGRATE|INT|DERIVATIVE|DIFF)\b/gi, (fn) => fn.toLowerCase());
   s = s.replace(/([0-9+\-*/=()^,]|^)([XYZ])([0-9+\-*/=()^,]|$)/g, (_, p1, p2, p3) => `${p1}${p2.toLowerCase()}${p3}`);
 
   // 8. Remove all internal whitespace around terms except comma/semicolon separation
@@ -99,15 +100,18 @@ export function normalizeMathExpression(raw: string): string {
   // 9. Expand implicit multiplication:
   // e.g., 5sqrt(x) -> 5*sqrt(x), but not for function names like 'sqrt'
   s = s.replace(/(\d)(sqrt|abs|sin|cos|tan|log|ln)/gi, '$1*$2');
-  s = s.replace(/(\d)([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\d)([a-zA-Z(])/g, (match, d, char) => {
+    return `${d}*${char}`;
+  });
 
   // e.g., (x+1)(x-2) -> (x+1)*(x-2)
   s = s.replace(/(\))([a-zA-Z0-9(])/g, '$1*$2');
 
-  // e.g., x(x+1) -> x*(x+1) when x is not a known function name
+  // e.g., x(x+1) -> x*(x+1) when x is not a known function or calculus name
   s = s.replace(/\b([a-zA-Z]+)(\()/g, (match, p1, p2) => {
     const lower = p1.toLowerCase();
-    if (['sqrt', 'abs', 'sin', 'cos', 'tan', 'log', 'ln'].includes(lower)) return match;
+    if (['sqrt', 'abs', 'sin', 'cos', 'tan', 'log', 'ln', 'int', 'integral', 'integrate', 'diff', 'derivative'].includes(lower)) return match;
+    if (/^d\/d[a-zA-Z]$/i.test(p1)) return match;
     return `${p1}*${p2}`;
   });
 

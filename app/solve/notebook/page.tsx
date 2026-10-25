@@ -19,13 +19,6 @@ const TYPE_LABELS: Record<HistoryInputType, string> = {
   typed: 'Typed',
 };
 
-const TYPE_ICONS: Record<HistoryInputType, string> = {
-  camera: 'photo_camera',
-  upload: 'upload_file',
-  pad: 'draw',
-  typed: 'keyboard',
-};
-
 function formatDate(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -40,7 +33,6 @@ export default function NotebookHistoryPage() {
   const [query, setQuery] = useState('');
   const [inputType, setInputType] = useState<'all' | HistoryInputType>('all');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = async () => {
     setIsLoading(true);
@@ -88,6 +80,8 @@ export default function NotebookHistoryPage() {
     });
   }, [favoritesOnly, inputType, items, query]);
 
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; item: HistoryItem } | { type: 'all' } | null>(null);
+
   const toggleFavorite = async (item: HistoryItem) => {
     const next = !item.favorite;
     setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, favorite: next } : entry)));
@@ -99,260 +93,261 @@ export default function NotebookHistoryPage() {
     }
   };
 
-  const removeItem = async (item: HistoryItem) => {
-    if (!window.confirm('Delete this saved problem from the notebook?')) return;
-    try {
-      await deleteHistoryItem(item.id);
-      setItems((current) => current.filter((entry) => entry.id !== item.id));
-    } catch {
-      setError('Could not delete the saved problem.');
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    if (deleteTarget.type === 'single') {
+      const { item } = deleteTarget;
+      setDeleteTarget(null);
+      try {
+        await deleteHistoryItem(item.id);
+        setItems((current) => current.filter((entry) => entry.id !== item.id));
+      } catch {
+        setError('Could not delete the saved problem.');
+      }
+    } else if (deleteTarget.type === 'all') {
+      setDeleteTarget(null);
+      try {
+        await clearHistory();
+        setItems([]);
+      } catch {
+        setError('Could not clear local history.');
+      }
     }
   };
 
-  const removeAll = async () => {
-    if (!items.length || !window.confirm('Delete every saved problem from this device?')) return;
-    try {
-      await clearHistory();
-      setItems([]);
-    } catch {
-      setError('Could not clear local history.');
-    }
+  const removeItem = (item: HistoryItem) => {
+    setDeleteTarget({ type: 'single', item });
   };
 
-  const copyLatex = async (item: HistoryItem) => {
-    try {
-      await navigator.clipboard.writeText(item.latex || item.expression);
-      setCopiedId(item.id);
-      setTimeout(() => setCopiedId(null), 1800);
-    } catch {
-      setError('Clipboard access was blocked by the browser.');
-    }
+  const removeAll = () => {
+    if (!items.length) return;
+    setDeleteTarget({ type: 'all' });
   };
 
   return (
     <div className="flex w-full flex-col">
       <div className="mx-auto flex w-full max-w-[1520px] flex-col gap-space-lg px-margin py-space-lg">
-        <section className="flex flex-col justify-between gap-space-md border-b border-hairline pb-space-sm md:flex-row md:items-end">
-          <div className="flex max-w-3xl flex-col gap-space-xs">
-            <div className="flex flex-wrap items-center gap-space-sm">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-olive-tint-soft px-2.5 py-0.5 font-code-sm text-code-sm font-semibold tracking-wider text-ink">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber"></span>
-                LOCAL NOTEBOOK • METHOD 05
-              </span>
-              <span className="font-code-sm text-code-sm text-ink-muted">ON-DEVICE INDEXEDDB HISTORY</span>
-            </div>
-            <h1 className="font-headline-xl text-headline-xl font-semibold tracking-tight text-ink">
+        {/* Editorial Title & Status Header */}
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-space-md border-b border-hairline pb-space-sm">
+          <div className="flex flex-col gap-1.5 max-w-3xl">
+            <h1 className="font-headline-xl text-headline-xl text-ink tracking-tight font-semibold">
               Notebook &amp; Derivation History
             </h1>
-            <p className="font-body-lg text-body-lg leading-relaxed text-ink-muted">
-              Saved problems stay on this device. Search, reopen, favorite, copy, or delete each
-              entry without sending math content to a server.
+            <p className="font-body-lg text-body-lg text-ink-muted leading-relaxed">
+              Review and reopen your verified solutions, step derivations, and mathematical proofs stored privately on this device.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto md:self-end">
             <Link
               href="/solve/type"
-              className="flex items-center gap-1.5 rounded-full bg-amber px-4 py-2 text-body-sm font-semibold text-ink shadow-xs transition-all hover:brightness-105"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-amber px-4 py-2.5 text-body-sm font-semibold text-ink shadow-xs transition-all hover:brightness-105 active:scale-95 cursor-pointer whitespace-nowrap"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              New Problem
+              <span>New Problem</span>
             </Link>
             <button
               type="button"
               onClick={removeAll}
               disabled={!items.length}
-              className="flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3.5 py-2 text-body-sm font-medium text-ink transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl border border-hairline bg-surface px-4 py-2.5 text-body-sm font-medium text-ink transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-xs whitespace-nowrap"
             >
               <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
-              Clear All
+              <span>Clear All</span>
             </button>
           </div>
         </section>
 
-        <section className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface p-3 shadow-card sm:flex-row sm:items-center">
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-hairline bg-canvas px-3 py-2">
-            <span className="material-symbols-outlined text-[18px] text-ink-muted">search</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent font-body-sm text-sm text-ink outline-none placeholder:text-ink-muted/60"
-              placeholder="Search expression, type, or answer"
-              aria-label="Search notebook"
-            />
-            {query && (
+        {/* Stats & Search/Filter Toolbar */}
+        <div className="flex flex-col gap-space-sm">
+        
+
+          <section className="flex flex-col gap-3 rounded-2xl border border-hairline bg-surface p-space-md shadow-card md:flex-row md:items-center">
+            <label className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-hairline bg-canvas/70 px-3.5 py-2.5 focus-within:border-amber focus-within:ring-1 focus-within:ring-amber transition-all">
+              <span className="material-symbols-outlined text-[19px] text-ink-muted">search</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent font-body-sm text-sm text-ink outline-none placeholder:text-ink-muted/60"
+                placeholder="Search expression, answer, or mathematical topic..."
+                aria-label="Search notebook"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="text-ink-muted hover:text-ink cursor-pointer"
+                  aria-label="Clear search"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              )}
+            </label>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(['all', 'camera', 'upload', 'pad', 'typed'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setInputType(type)}
+                  className={`rounded-full px-3 py-1.5 font-code-sm text-xs font-medium transition-all cursor-pointer ${
+                    inputType === type
+                      ? 'bg-ink text-surface shadow-xs'
+                      : 'border border-hairline bg-canvas/80 text-ink hover:bg-surface-container'
+                  }`}
+                >
+                  {type === 'all' ? 'All Methods' : TYPE_LABELS[type]}
+                </button>
+              ))}
               <button
                 type="button"
-                onClick={() => setQuery('')}
-                className="text-ink-muted hover:text-ink"
-                aria-label="Clear search"
-              >
-                <span className="material-symbols-outlined text-[17px]">close</span>
-              </button>
-            )}
-          </label>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(['all', 'camera', 'upload', 'pad', 'typed'] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setInputType(type)}
-                className={`rounded-full px-2.5 py-1 font-code-sm text-[11px] transition-colors ${
-                  inputType === type
-                    ? 'bg-ink text-surface'
-                    : 'border border-hairline bg-surface text-ink-muted hover:bg-surface-container'
+                onClick={() => setFavoritesOnly((value) => !value)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-code-sm text-xs font-medium transition-all cursor-pointer ${
+                  favoritesOnly
+                    ? 'bg-amber/20 text-amber border border-amber/40'
+                    : 'border border-hairline bg-canvas/80 text-ink hover:bg-surface-container'
                 }`}
+                aria-pressed={favoritesOnly}
               >
-                {type === 'all' ? 'All' : TYPE_LABELS[type]}
+                <span
+                  className="material-symbols-outlined text-[15px]"
+                  style={{ fontVariationSettings: favoritesOnly ? "'FILL' 1" : "'FILL' 0" }}
+                >
+                  star
+                </span>
+                <span>Starred</span>
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setFavoritesOnly((value) => !value)}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-code-sm text-[11px] transition-colors ${
-                favoritesOnly
-                  ? 'bg-amber/20 text-amber'
-                  : 'border border-hairline bg-surface text-ink-muted hover:bg-surface-container'
-              }`}
-              aria-pressed={favoritesOnly}
-            >
-              <span className="material-symbols-outlined text-[14px]">star</span>
-              Starred
-            </button>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
 
         {error && (
-          <div role="alert" className="rounded-lg border border-error/30 bg-error-container/50 px-3 py-2 font-body-sm text-sm text-error">
-            {error}
-            <button type="button" onClick={() => void load()} className="ml-2 underline">
+          <div role="alert" className="rounded-xl border border-error/30 bg-error-container/30 px-3.5 py-2.5 font-body-sm text-sm text-error flex items-center justify-between">
+            <span>{error}</span>
+            <button type="button" onClick={() => void load()} className="underline font-semibold cursor-pointer">
               Retry
             </button>
           </div>
         )}
 
         {isLoading ? (
-          <div className="flex min-h-[240px] items-center justify-center gap-2 rounded-xl border border-hairline bg-surface text-ink-muted shadow-card">
-            <span className="material-symbols-outlined animate-spin">refresh</span>
-            Loading local history...
+          <div className="flex min-h-[300px] flex-col items-center justify-center gap-2 rounded-2xl border border-hairline bg-surface text-ink-muted shadow-card">
+            <span className="material-symbols-outlined text-[28px] animate-spin text-amber">refresh</span>
+            <span className="font-body-sm text-sm">Loading local notebook history...</span>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-hairline bg-surface p-space-lg text-center shadow-card">
-            <span className="material-symbols-outlined text-[42px] text-amber">menu_book</span>
+          <div className="flex min-h-[360px] flex-col items-center justify-center gap-3.5 rounded-2xl border border-dashed border-hairline bg-surface p-space-xl text-center shadow-card">
+            <div className="w-14 h-14 rounded-full bg-surface-container-low flex items-center justify-center border border-hairline text-amber">
+              <span className="material-symbols-outlined text-[30px]">menu_book</span>
+            </div>
             <h2 className="font-headline-sm text-headline-sm font-semibold text-ink">
               {items.length ? 'No matching saved problems' : 'Your notebook is empty'}
             </h2>
             <p className="max-w-md font-body-sm text-body-sm text-ink-muted">
               {items.length
-                ? 'Try a different search term or filter.'
-                : 'Solve a problem from any input tab and it will appear here automatically.'}
+                ? 'Try a different search query or method filter.'
+                : 'Solve any math problem via Photo, Upload, Handwriting, or Type & Solve and it will appear here.'}
             </p>
             {!items.length && (
               <Link
                 href="/solve/capture"
-                className="mt-1 rounded-full bg-amber px-4 py-2 text-body-sm font-semibold text-ink"
+                className="mt-2 rounded-xl bg-amber px-5 py-2.5 text-body-sm font-semibold text-ink shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer"
               >
-                Start with a problem
+                Solve Your First Problem
               </Link>
             )}
           </div>
         ) : (
-          <>
+          <div className="flex flex-col gap-space-md">
             <div className="flex items-center justify-between gap-2 px-space-xs">
-              <span className="font-code-sm text-code-sm text-ink-muted">
-                {filteredItems.length} of {items.length} saved
+              <span className="font-code-sm text-xs text-ink-muted">
+                Showing {filteredItems.length} of {items.length} saved entries
               </span>
               <button
                 type="button"
                 onClick={() => void load()}
-                className="flex items-center gap-1 font-code-sm text-code-sm text-ink-muted hover:text-ink"
+                className="flex items-center gap-1 font-code-sm text-xs text-ink-muted hover:text-ink cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[15px]">refresh</span>
-                Refresh
+                <span>Refresh List</span>
               </button>
             </div>
-            <div className="grid grid-cols-1 gap-space-md md:grid-cols-2">
+
+            <div className="grid grid-cols-1 gap-space-md lg:grid-cols-2">
               {filteredItems.map((item) => (
                 <article
                   key={item.id}
-                  className="flex flex-col justify-between gap-4 rounded-2xl border border-hairline bg-surface p-5 shadow-xs transition-all hover:border-amber/60 hover:shadow-sm"
+                  className="group flex flex-col justify-between gap-4 rounded-2xl border border-hairline bg-surface p-space-md shadow-card transition-all hover:border-amber hover:shadow-md"
                 >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
-                      <span className="inline-flex items-center gap-1 font-code-sm uppercase tracking-wider">
-                        <span className="material-symbols-outlined text-[15px]">{TYPE_ICONS[item.inputType]}</span>
-                        {TYPE_LABELS[item.inputType]}
+                  <div className="flex flex-col gap-space-sm">
+                    {/* Top Row: Date on the right */}
+                    <div className="flex items-center justify-end">
+                      <span className="font-code-sm text-[11px] text-ink-muted">{formatDate(item.createdAt)}</span>
+                    </div>
+
+                    {/* Problem Type Title */}
+                    <h2 className="font-headline-sm text-lg font-semibold text-ink line-clamp-1 h-7 flex items-center">{item.problemType}</h2>
+
+                    {/* Formula Render Box - strict fixed height and centering */}
+                    <div className="h-24 flex items-center justify-center overflow-x-auto rounded-xl border border-hairline bg-canvas/60 p-3 text-center">
+                      <MathRenderer math={item.latex || item.expression} block className="text-xl text-ink" />
+                    </div>
+
+                    {/* Final Answer Box - strict fixed height and identical baseline */}
+                    <div className="h-24 flex flex-col justify-between rounded-xl bg-surface-container-low/70 border border-hairline p-3">
+                      <span className="font-code-sm text-[10px] uppercase tracking-widest text-amber font-semibold shrink-0">
+                        Final Answer
                       </span>
-                      <span className="font-code-sm text-[11px]">{formatDate(item.createdAt)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="font-headline-sm text-base font-semibold text-ink">{item.problemType}</h2>
-                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-code-sm text-[10px] ${
-                        item.isVerified
-                          ? 'bg-secondary-container text-on-secondary-fixed'
-                          : 'bg-surface-container text-ink-muted'
-                      }`}>
-                        <span className="material-symbols-outlined text-[13px]">
-                          {item.isVerified ? 'verified' : 'info'}
-                        </span>
-                        {item.isVerified ? 'Verified' : 'Solved'}
-                      </span>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border border-hairline bg-canvas p-3">
-                      <MathRenderer math={item.latex || item.expression} className="text-base text-ink" />
-                    </div>
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-caption text-caption uppercase text-ink-muted">Answer</span>
-                      <code className="select-all font-code-sm text-code-sm font-semibold text-ink">
-                        {item.finalAnswerPlain}
-                      </code>
+                      <div className="flex-1 flex items-center overflow-x-auto">
+                        <MathRenderer
+                          math={item.finalAnswerLatex || item.finalAnswerPlain}
+                          className="font-headline-sm text-xl text-ink font-semibold"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline/60 pt-2">
-                    <span className="font-code-sm text-[11px] text-ink-muted">
-                      {item.steps.length} step{item.steps.length === 1 ? '' : 's'}
+                  {/* Card Bottom Action Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline/60 pt-3">
+                    <span className="font-code-sm text-xs text-ink-muted">
+                      {item.steps.length} step{item.steps.length === 1 ? '' : 's'} derived
                     </span>
-                    <div className="flex items-center gap-1">
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => void toggleFavorite(item)}
-                        className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-surface-container ${
-                          item.favorite ? 'text-amber' : 'text-ink-muted hover:text-ink'
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border border-hairline transition-colors cursor-pointer ${
+                          item.favorite
+                            ? 'bg-amber/15 border-amber/40 text-amber'
+                            : 'bg-surface text-ink-muted hover:bg-surface-container hover:text-ink'
                         }`}
-                        aria-label={item.favorite ? 'Remove favorite' : 'Favorite problem'}
+                        title={item.favorite ? 'Starred' : 'Star problem'}
                         aria-pressed={item.favorite}
                       >
                         <span
-                          className="material-symbols-outlined text-[17px]"
+                          className="material-symbols-outlined text-[18px]"
                           style={{ fontVariationSettings: item.favorite ? "'FILL' 1" : "'FILL' 0" }}
                         >
                           star
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void copyLatex(item)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-container hover:text-ink"
-                        aria-label="Copy LaTeX"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">
-                          {copiedId === item.id ? 'check' : 'content_copy'}
-                        </span>
-                      </button>
+
                       <Link
                         href={`/solve/type?expr=${encodeURIComponent(item.expression)}&historyId=${encodeURIComponent(item.id)}`}
-                        className="flex h-8 items-center gap-1 rounded-lg px-2 text-ink-muted transition-colors hover:bg-surface-container hover:text-ink"
-                        aria-label="Reopen expression"
+                        className="flex h-9 items-center gap-1.5 rounded-xl bg-amber px-3.5 font-body-sm text-xs font-semibold text-ink shadow-xs transition-all hover:brightness-105 active:scale-95 cursor-pointer"
+                        title="Reopen in Type & Solve"
                       >
-                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                        <span className="font-code-sm text-[11px]">Open</span>
+                        <span>Reopen</span>
+                        <span className="material-symbols-outlined text-[15px]">open_in_new</span>
                       </Link>
+
                       <button
                         type="button"
-                        onClick={() => void removeItem(item)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-error-container/40 hover:text-error"
-                        aria-label="Delete saved problem"
+                        onClick={() => removeItem(item)}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-hairline bg-surface text-ink-muted transition-colors hover:border-error/40 hover:bg-error-container/30 hover:text-error cursor-pointer"
+                        title="Delete saved problem"
                       >
                         <span className="material-symbols-outlined text-[16px]">delete</span>
                       </button>
@@ -361,9 +356,48 @@ export default function NotebookHistoryPage() {
                 </article>
               ))}
             </div>
-          </>
+          </div>
         )}
       </div>
+
+      {/* In-app custom confirmation modal (replaces window.confirm) */}
+      {deleteTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-hairline bg-surface p-space-md shadow-card flex flex-col gap-space-sm">
+            <div className="flex items-center gap-2 text-error font-medium">
+              <span className="material-symbols-outlined text-[20px]">warning</span>
+              <span className="font-body-sm font-semibold">
+                {deleteTarget.type === 'all' ? 'Clear Entire Notebook?' : 'Delete Saved Problem?'}
+              </span>
+            </div>
+            <p className="font-body-sm text-xs text-ink-muted leading-relaxed">
+              {deleteTarget.type === 'all'
+                ? 'This will permanently remove all saved equations, derivations, and history from this device. This action cannot be undone.'
+                : 'This problem will be permanently deleted from your saved notebook.'}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-3 py-1.5 rounded-lg border border-hairline bg-surface font-body-sm text-xs font-medium text-ink hover:bg-surface-container transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-3.5 py-1.5 rounded-lg bg-error font-body-sm text-xs font-semibold text-white shadow-xs hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              >
+                {deleteTarget.type === 'all' ? 'Delete All' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

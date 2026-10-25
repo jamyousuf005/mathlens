@@ -4,29 +4,62 @@ import { emailOTP } from 'better-auth/plugins';
 import { mongoDb } from './db/client';
 import { Resend } from 'resend';
 
+// Enforce auth secret in production
+const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
+if (!authSecret && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: BETTER_AUTH_SECRET (or AUTH_SECRET) is required in production.');
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 const fromEmail = process.env.RESEND_FROM_EMAIL || 'MathLens <auth@jamyousuf.me>';
 
-export const auth = betterAuth({
-  database: mongodbAdapter(mongoDb),
-  secret: process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-  trustedOrigins: [
+// Dynamic trusted origins supporting production, localhost, and Vercel preview deployments
+function getTrustedOrigins(): string[] {
+  const origins: string[] = [
     'https://mathlens-rho.vercel.app',
     'http://localhost:3000',
-  ],
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    },
-  },
+    'http://127.0.0.1:3000',
+  ];
+
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    origins.push(process.env.NEXT_PUBLIC_APP_URL);
+  }
+  if (process.env.VERCEL_URL) {
+    origins.push(`https://${process.env.VERCEL_URL}`);
+  }
+
+  return origins;
+}
+
+// Only configure Google provider if real credentials are present
+const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  socialProviders.google = {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  };
+}
+
+export const auth = betterAuth({
+  database: mongodbAdapter(mongoDb),
+  secret: authSecret || 'dev-insecure-secret-key-32chars-minimum!',
+  baseURL:
+    process.env.BETTER_AUTH_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined) ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'http://localhost:3000',
+  trustedOrigins: getTrustedOrigins(),
+  ...(Object.keys(socialProviders).length > 0 ? { socialProviders } : {}),
   plugins: [
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
         try {
           if (!process.env.RESEND_API_KEY) {
-            console.log(`[DEV OTP] Verification code for ${email} (${type}): ${otp}`);
+            if (process.env.NODE_ENV !== 'production') {
+              console.log(`[DEV OTP] Verification code for ${email} (${type}): ${otp}`);
+            } else {
+              console.error(`[AUTH ERROR] Cannot send OTP: RESEND_API_KEY is not configured.`);
+            }
             return;
           }
 

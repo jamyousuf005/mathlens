@@ -285,12 +285,18 @@ export class Polynomial {
         .map(([name, exponent]) => (exponent === 1 ? name : `${name}^{${exponent}}`))
         .join('');
       const absolute = item.coefficient.abs();
-      const coefficient = monomial === ''
-        ? absolute.toLatex()
-        : absolute.equals(ONE)
-          ? ''
-          : absolute.toLatex();
-      const term = `${coefficient}${monomial}`;
+      let term = '';
+      if (monomial === '') {
+        term = absolute.toLatex();
+      } else if (absolute.equals(ONE)) {
+        term = monomial;
+      } else if (absolute.isInteger()) {
+        term = `${absolute.toString()}${monomial}`;
+      } else if (absolute.n === 1n) {
+        term = `\\frac{${monomial}}{${absolute.d}}`;
+      } else {
+        term = `\\frac{${absolute.n}${monomial}}{${absolute.d}}`;
+      }
       if (result === '') {
         result = item.coefficient.sign() < 0 ? `-${term}` : term;
       } else {

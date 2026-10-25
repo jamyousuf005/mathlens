@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
+import { clearHistory } from '@/lib/history';
 
 export default function SolveHeader() {
   const pathname = usePathname();
@@ -11,6 +12,30 @@ export default function SolveHeader() {
   const { data: session, isPending } = authClient.useSession();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch('/api/user/account', { method: 'DELETE' });
+      if (res.ok) {
+        // Also erase local browser IndexedDB storage completely
+        try {
+          await clearHistory();
+        } catch (e) {
+          console.warn('Failed to clear local history:', e);
+        }
+        await authClient.signOut();
+        router.push('/');
+      }
+    } catch (err) {
+      console.error('Failed to delete account:', err);
+    } finally {
+      setIsDeletingAccount(false);
+      setShowDeleteModal(false);
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -87,10 +112,7 @@ export default function SolveHeader() {
               Math<span className="text-amber">Lens</span>
             </span>
           </Link>
-          <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container font-code-sm text-[11px] text-ink-muted">
-            <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-            <span>TS CAS v1.0</span>
-          </div>
+          
         </div>
 
 
@@ -117,7 +139,7 @@ export default function SolveHeader() {
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors cursor-pointer border border-hairline"
+              className="flex items-center gap-1.5 p-0 sm:pl-2.5 sm:pr-1.5 sm:py-1 rounded-full sm:bg-surface-container sm:hover:bg-surface-container-high transition-colors cursor-pointer sm:border sm:border-hairline overflow-hidden"
               type="button"
               aria-expanded={userMenuOpen}
               aria-label="User profile menu"
@@ -125,7 +147,7 @@ export default function SolveHeader() {
               <span className="hidden sm:inline font-code-sm text-code-sm text-ink max-w-[100px] md:max-w-[120px] truncate">
                 {isPending ? '...' : userDisplayName}
               </span>
-              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary font-semibold text-xs shadow-xs shrink-0">
+              <div className="w-8 h-8 sm:w-6 sm:h-6 rounded-full bg-amber flex items-center justify-center text-ink font-bold text-xs shadow-xs shrink-0 ring-1 ring-hairline sm:ring-0">
                 {session?.user?.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -163,18 +185,10 @@ export default function SolveHeader() {
                 </button>
                 <div className="my-1 border-t border-hairline"></div>
                 <button
-                  onClick={async () => {
-                    if (window.confirm('Are you sure you want to delete your account? All saved solutions and history will be permanently erased.')) {
-                      try {
-                        const res = await fetch('/api/user/account', { method: 'DELETE' });
-                        if (res.ok) {
-                          await authClient.signOut();
-                          router.push('/');
-                        }
-                      } catch (err) {
-                        console.error('Failed to delete account:', err);
-                      }
-                    }
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setShowDeleteModal(true);
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs text-error hover:bg-error-container/40 flex items-center gap-2 transition-colors cursor-pointer"
                 >
@@ -206,6 +220,46 @@ export default function SolveHeader() {
           ))}
         </nav>
       </div>
+
+      {/* In-app custom account deletion confirmation modal */}
+      {showDeleteModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-hairline bg-surface p-space-md shadow-card flex flex-col gap-space-sm">
+            <div className="flex items-center gap-2 text-error font-medium">
+              <span className="material-symbols-outlined text-[20px]">warning</span>
+              <span className="font-body-sm font-semibold">Delete Account?</span>
+            </div>
+            <p className="font-body-sm text-xs text-ink-muted leading-relaxed">
+              Are you sure you want to delete your account? All saved solutions, history, and notebook entries will be permanently erased.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeletingAccount}
+                className="px-3 py-1.5 rounded-lg border border-hairline bg-surface font-body-sm text-xs font-medium text-ink hover:bg-surface-container transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeletingAccount}
+                className="px-3.5 py-1.5 rounded-lg bg-error font-body-sm text-xs font-semibold text-white shadow-xs hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isDeletingAccount && (
+                  <span className="material-symbols-outlined text-[14px] animate-spin">refresh</span>
+                )}
+                <span>{isDeletingAccount ? 'Deleting...' : 'Delete Account'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

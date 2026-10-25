@@ -9,7 +9,6 @@ import {
   CheckCircle,
   Mail,
   Cpu,
-  BookOpen,
   ShieldCheck,
   CheckSquare,
   ArrowRight,

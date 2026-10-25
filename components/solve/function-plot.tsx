@@ -9,30 +9,103 @@ interface FunctionPlotProps {
   variable?: string;
 }
 
+import { tokenize } from '@/lib/engine/lexer';
+import { Parser } from '@/lib/engine/parser';
+import { normalizeMathExpression } from '@/lib/engine/normalizer';
+import type { ASTNode } from '@/lib/engine/types';
+
+// Deterministic recursive AST evaluator for plotting function curves without eval / new Function
+function evaluateAstNode(node: ASTNode, variable: string, xValue: number): number {
+  if (node.type === 'Number') {
+    return node.value;
+  }
+  if (node.type === 'Identifier') {
+    if (node.name.toLowerCase() === variable.toLowerCase()) {
+      return xValue;
+    }
+    throw new Error(`Unknown variable ${node.name}`);
+  }
+  if (node.type === 'UnaryOp') {
+    const val = evaluateAstNode(node.argument, variable, xValue);
+    return node.operator === '-' ? -val : val;
+  }
+  if (node.type === 'BinaryOp') {
+    const left = evaluateAstNode(node.left, variable, xValue);
+    const right = evaluateAstNode(node.right, variable, xValue);
+    switch (node.operator) {
+      case '+': return left + right;
+      case '-': return left - right;
+      case '*': return left * right;
+      case '/': {
+        if (Math.abs(right) < 1e-12) throw new Error('Division by zero');
+        return left / right;
+      }
+      case '^': return Math.pow(left, right);
+    }
+  }
+  if (node.type === 'FunctionCall') {
+    const arg = evaluateAstNode(node.argument, variable, xValue);
+    switch (node.name) {
+      case 'abs': return Math.abs(arg);
+      case 'sqrt': {
+        if (arg < 0) throw new Error('Square root of negative number');
+        return Math.sqrt(arg);
+      }
+      case 'sin': return Math.sin(arg);
+      case 'cos': return Math.cos(arg);
+      case 'tan': {
+        if (Math.abs(Math.cos(arg)) < 1e-12) throw new Error('Division by zero');
+        return Math.tan(arg);
+      }
+      case 'log': {
+        if (arg <= 0) throw new Error('Log domain error');
+        return Math.log10(arg);
+      }
+      case 'ln': {
+        if (arg <= 0) throw new Error('Ln domain error');
+        return Math.log(arg);
+      }
+    }
+  }
+  if (node.type === 'Equation') {
+    // For equations like f(x) = 0 or LHS = RHS, evaluate as (LHS - RHS)
+    const left = evaluateAstNode(node.left, variable, xValue);
+    const right = evaluateAstNode(node.right, variable, xValue);
+    return left - right;
+  }
+  throw new Error('Unsupported AST node');
+}
+
 export function FunctionPlot({ expression, roots = [], variable = 'x' }: FunctionPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [range, setRange] = useState({ xMin: -6, xMax: 6, yMin: -6, yMax: 6 });
 
-  // Simple safe JS evaluator for plotting (turns polynomial string into f(x))
-  const evaluate = (x: number): number | null => {
+  // Pre-parse the expression into an AST once or per render
+  const astRef = useRef<ASTNode | null>(null);
+  useEffect(() => {
     try {
-      // Clean expression to JS math syntax
-      let clean = expression
-        .replace(/=/g, '-')
-        .replace(/(\d)([a-zA-Z])/g, '$1*$2')
-        .replace(/\^/g, '**');
-
-      // Replace variable
-      clean = clean.replace(new RegExp(`\\b${variable}\\b`, 'g'), `(${x})`);
-
-      // Evaluate safely
-      const fn = new Function(`return (${clean})`);
-      const val = Number(fn());
-      return Number.isFinite(val) ? val : null;
+      const normalized = normalizeMathExpression(expression);
+      const tokens = tokenize(normalized);
+      const parser = new Parser(tokens);
+      astRef.current = parser.parse();
     } catch {
-      return null;
+      astRef.current = null;
     }
-  };
+  }, [expression]);
+
+  // Safe deterministic evaluator without eval / new Function (NFR-05 compliant)
+  const evaluate = React.useCallback(
+    (x: number): number | null => {
+      if (!astRef.current) return null;
+      try {
+        const val = evaluateAstNode(astRef.current, variable, x);
+        return Number.isFinite(val) ? val : null;
+      } catch {
+        return null;
+      }
+    },
+    [variable]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -134,7 +207,7 @@ export function FunctionPlot({ expression, roots = [], variable = 'x' }: Functio
         }
       }
     }
-  }, [range, expression, roots, variable]);
+  }, [range, expression, roots, variable, evaluate]);
 
   const zoom = (factor: number) => {
     setRange((prev) => ({
