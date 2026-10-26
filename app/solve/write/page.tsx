@@ -744,20 +744,38 @@ export default function WriteSolvePage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="py-space-md px-space-lg rounded-xl bg-canvas/60 flex items-center justify-center text-center border border-hairline overflow-x-auto">
-                        <MathRenderer math={latexExpr || expression} block className="text-2xl text-ink md:text-3xl" />
+                      <div className="flex flex-col gap-3">
+                        <div className="py-space-md px-space-lg rounded-xl bg-canvas/60 flex items-center justify-center text-center border border-hairline overflow-x-auto">
+                          <MathRenderer math={latexExpr || expression} block className="text-2xl text-ink md:text-3xl" />
+                        </div>
+                        {isConfirming && (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-hairline/60">
+                            <span className="font-body-sm text-xs text-ink-muted">Does this formula match your written sketch?</span>
+                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditBuffer(expression);
+                                  setIsEditingExpression(true);
+                                }}
+                                className="px-3 py-1.5 rounded-lg border border-hairline hover:bg-surface-container font-body-sm text-xs font-medium text-ink cursor-pointer transition-colors"
+                              >
+                                Edit Formula
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleConfirmEdit}
+                                className="px-3.5 py-1.5 rounded-lg bg-amber text-ink font-semibold font-body-sm text-xs shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">check</span>
+                                <span>Confirm &amp; Solve</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-
-                  {isConfirming && (
-                    <div className="rounded-xl border border-amber/40 bg-amber/10 p-space-md">
-                      <p className="font-body-sm text-sm font-semibold text-ink">Confirm before solving</p>
-                      <p className="mt-1 font-body-sm text-[13px] text-ink-muted">
-                        Review the transcribed expression above and press Confirm &amp; Solve.
-                      </p>
-                    </div>
-                  )}
 
                   {solution && !isConfirming && (
                     <div className="contents">

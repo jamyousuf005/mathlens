@@ -474,11 +474,85 @@ function twoVariablePerfectSquare(polynomial: Polynomial): { plain: string; late
   return null;
 }
 
+function cubeRootTerm(
+  key: string,
+  coefficient: Fraction
+): Polynomial | null {
+  if (coefficient.sign() <= 0) return null;
+  const rootCoefficient = Fraction.cbrt(coefficient);
+  if (!rootCoefficient) return null;
+  const exponents = parseKey(key);
+  const rootExponents = new Map<string, number>();
+  for (const [name, exponent] of exponents) {
+    if (exponent % 3 !== 0) return null;
+    rootExponents.set(name, exponent / 3);
+  }
+  return Polynomial.fromTerm(keyFromExponents(rootExponents), rootCoefficient);
+}
+
+function differenceOfCubes(polynomial: Polynomial): { plain: string; latex: string } | null {
+  const entries = polynomial.entries();
+  if (entries.length !== 2) return null;
+  const positive = entries.filter(([, coefficient]) => coefficient.sign() > 0);
+  const negative = entries.filter(([, coefficient]) => coefficient.sign() < 0);
+  if (positive.length !== 1 || negative.length !== 1) return null;
+  const first = cubeRootTerm(positive[0][0], positive[0][1]);
+  const second = cubeRootTerm(negative[0][0], negative[0][1].abs());
+  if (!first || !second) return null;
+  if (first.equals(second)) return null;
+
+  // (a - b)(a^2 + ab + b^2)
+  const a = first.toString();
+  const b = second.toString();
+  const a2 = first.pow(2);
+  const ab = first.mul(second);
+  const b2 = second.pow(2);
+  const trinomial = a2.add(ab).add(b2);
+
+  const aLatex = first.toLatex();
+  const bLatex = second.toLatex();
+  const trinomialLatex = trinomial.toLatex();
+
+  return {
+    plain: `(${a} - ${b})(${trinomial.toString()})`,
+    latex: `(${aLatex} - ${bLatex})(${trinomialLatex})`,
+  };
+}
+
+function sumOfCubes(polynomial: Polynomial): { plain: string; latex: string } | null {
+  const entries = polynomial.entries();
+  if (entries.length !== 2) return null;
+  const positive = entries.filter(([, coefficient]) => coefficient.sign() > 0);
+  if (positive.length !== 2) return null;
+  const first = cubeRootTerm(positive[0][0], positive[0][1]);
+  const second = cubeRootTerm(positive[1][0], positive[1][1]);
+  if (!first || !second) return null;
+
+  // (a + b)(a^2 - ab + b^2)
+  const a = first.toString();
+  const b = second.toString();
+  const a2 = first.pow(2);
+  const ab = first.mul(second);
+  const b2 = second.pow(2);
+  const trinomial = a2.sub(ab).add(b2);
+
+  const aLatex = first.toLatex();
+  const bLatex = second.toLatex();
+  const trinomialLatex = trinomial.toLatex();
+
+  return {
+    plain: `(${a} + ${b})(${trinomial.toString()})`,
+    latex: `(${aLatex} + ${bLatex})(${trinomialLatex})`,
+  };
+}
+
 export function factorPolynomial(
   polynomial: Polynomial
 ): { plain: string; latex: string } | null {
   return (
     differenceOfSquares(polynomial) ??
+    differenceOfCubes(polynomial) ??
+    sumOfCubes(polynomial) ??
     univariatePerfectSquare(polynomial) ??
     twoVariablePerfectSquare(polynomial)
   );

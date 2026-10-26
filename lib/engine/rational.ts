@@ -27,6 +27,26 @@ function integerSqrt(n: bigint): bigint | null {
   return x0 * x0 === n ? x0 : null;
 }
 
+function integerCbrt(n: bigint): bigint | null {
+  if (n === 0n) return 0n;
+  const isNeg = n < 0n;
+  const val = isNeg ? -n : n;
+  let x0 = val;
+  let x1 = (2n * val + 1n) / 3n;
+  if (val > 2n) {
+    // Initial guess using bit length or approximation
+    x0 = val;
+    x1 = (2n * x0 + val / (x0 * x0)) / 3n;
+    while (x1 < x0) {
+      x0 = x1;
+      x1 = (2n * x0 + val / (x0 * x0)) / 3n;
+    }
+  }
+  const root = x0 * x0 * x0 === val ? x0 : null;
+  if (root === null) return null;
+  return isNeg ? -root : root;
+}
+
 export class Fraction {
   readonly n: bigint;
   readonly d: bigint;
@@ -63,6 +83,13 @@ export class Fraction {
     if (value.n < 0n) return null;
     const numerator = integerSqrt(value.n);
     const denominator = integerSqrt(value.d);
+    if (numerator === null || denominator === null) return null;
+    return new Fraction(numerator, denominator);
+  }
+
+  static cbrt(value: Fraction): Fraction | null {
+    const numerator = integerCbrt(value.n);
+    const denominator = integerCbrt(value.d);
     if (numerator === null || denominator === null) return null;
     return new Fraction(numerator, denominator);
   }
