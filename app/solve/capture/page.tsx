@@ -695,16 +695,6 @@ export default function CaptureSolvePage() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditBuffer(currentExpression);
-                                setIsEditingConfirm(true);
-                              }}
-                              className="px-3 py-1.5 rounded-lg border border-hairline hover:bg-surface-container font-body-sm text-xs font-medium text-ink cursor-pointer transition-colors"
-                            >
-                              Edit Formula
-                            </button>
-                            <button
-                              type="button"
                               onClick={handleConfirmEdit}
                               className="px-3.5 py-1.5 rounded-lg bg-amber text-ink font-semibold font-body-sm text-xs shadow-xs hover:brightness-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
                             >
