@@ -52,7 +52,7 @@ export default function SolveHeader() {
   }, [userMenuOpen]);
 
   // User display name from Better Auth session or fallback
-  const userDisplayName = session?.user?.name || (session?.user?.email ? session.user.email.split('@')[0] : 'alex.miller');
+  const userDisplayName = session?.user?.name || (session?.user?.email ? session.user.email.split('@')[0] : 'user');
   const userInitial = userDisplayName ? userDisplayName[0].toUpperCase() : 'U';
 
   const navLinks = [

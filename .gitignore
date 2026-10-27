@@ -47,7 +47,7 @@ skills-lock.json
 .vscode/
 .idea/
 
-README.md
+SRS.md
 
 # tests
 tests/
