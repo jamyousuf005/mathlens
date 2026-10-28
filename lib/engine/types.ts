@@ -91,9 +91,12 @@ export interface SolutionResult {
   problemType:
     | 'Quadratic Equation'
     | 'Linear Equation'
+    | 'Inequality'
     | 'System of Linear Equations'
     | 'Differentiation'
     | 'Integration'
+    | 'Limit'
+    | 'Matrix Operation'
     | 'Arithmetic'
     | 'Algebraic Simplification'
     | 'Algebraic Identity / Factoring'

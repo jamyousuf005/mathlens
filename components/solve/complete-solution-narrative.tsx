@@ -221,23 +221,23 @@ export function CompleteSolutionNarrative({
       {activeTab === 'article' && (
         <div className="flex flex-col gap-space-md animate-in fade-in duration-200">
           {/* Problem Statement Callout */}
-          <div className="rounded-xl p-space-md bg-surface-container-low border border-hairline flex flex-col gap-1.5">
+          <div className="rounded-xl p-space-md bg-surface-container-low border border-hairline flex flex-col gap-1.5 max-w-full overflow-hidden">
             <div className="flex items-center justify-between text-caption font-code-sm text-ink-muted">
               <span className="font-semibold text-primary uppercase tracking-wider">Problem</span>
               <span>{narrative.problemType}</span>
             </div>
-            <div className="font-serif text-2xl text-ink font-normal tracking-wide py-1 text-center">
-              <MathRenderer math={solution.latexExpression || narrative.originalProblem} block className="text-2xl text-ink" />
+            <div className="font-serif text-xl sm:text-2xl text-ink font-normal tracking-wide py-1 text-center w-full max-w-full overflow-x-auto">
+              <MathRenderer math={solution.latexExpression || narrative.originalProblem} block className="text-xl sm:text-2xl text-ink" />
             </div>
           </div>
 
           {/* Flow of Pure Mathematical Step Equations */}
           {!stepsCollapsed && (
-            <div className="flex flex-col gap-space-sm">
+            <div className="flex flex-col gap-space-sm max-w-full">
               {narrative.sections.map((section, idx) => (
                 <div
                   key={idx}
-                  className="p-space-md rounded-xl bg-surface border border-hairline hover:border-amber/40 transition-colors flex flex-col gap-2 shadow-xs"
+                  className="p-space-md rounded-xl bg-surface border border-hairline hover:border-amber/40 transition-colors flex flex-col gap-2 shadow-xs max-w-full overflow-hidden"
                 >
                   <div className="flex items-center justify-between flex-wrap gap-1">
                     <span className="font-code-sm text-caption font-bold text-ink-muted uppercase tracking-wider flex items-center">
@@ -251,8 +251,8 @@ export function CompleteSolutionNarrative({
                   </div>
 
                   {section.mathExpression && (
-                    <div className="p-3 rounded-lg bg-surface-container-low border border-hairline overflow-x-auto flex items-center justify-center text-center">
-                      <MathRenderer math={section.mathExpression} block className="text-lg sm:text-xl text-ink font-medium" />
+                    <div className="p-3 rounded-lg bg-surface-container-low border border-hairline overflow-x-auto max-w-full flex items-center justify-center text-center">
+                      <MathRenderer math={section.mathExpression} block className="text-base sm:text-xl text-ink font-medium" />
                     </div>
                   )}
                 </div>
@@ -261,18 +261,16 @@ export function CompleteSolutionNarrative({
           )}
 
           {/* Definitive Final Answer Box */}
-          <div className="rounded-xl border-2 border-amber bg-gradient-to-r from-surface via-surface to-amber/5 p-space-md flex flex-col gap-2 shadow-xs">
+          <div className="rounded-xl border-2 border-amber bg-gradient-to-r from-surface via-surface to-amber/5 p-space-md flex flex-col gap-2 shadow-xs max-w-full overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-code-sm text-caption font-bold tracking-widest text-primary uppercase flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber"></span>
                 Final Answer
               </span>
-
             </div>
-            <div className="font-serif text-3xl font-medium text-ink tracking-tight select-all py-1 text-center">
-              <MathRenderer math={solution.finalAnswerLatex || solution.finalAnswerPlain} block className="text-3xl text-ink" />
+            <div className="font-serif text-2xl sm:text-3xl font-medium text-ink tracking-tight select-all py-1 text-center max-w-full overflow-x-auto">
+              <MathRenderer math={solution.finalAnswerLatex || solution.finalAnswerPlain} block className="text-xl sm:text-2xl lg:text-3xl text-ink" />
             </div>
-          
           </div>
         </div>
       )}

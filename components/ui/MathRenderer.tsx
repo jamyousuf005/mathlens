@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from 'react';
 import katex from 'katex';
-import 'katex/dist/katex.min.css';
 
 interface MathRendererProps {
   math: string;
@@ -25,6 +24,14 @@ export function MathRenderer({ math, block = false, className = '' }: MathRender
       }
     }
   }, [math, block]);
+
+  if (block) {
+    return (
+      <div className="w-full max-w-full overflow-x-auto overflow-y-hidden py-1 px-0.5 text-center scrollbar-thin">
+        <span ref={containerRef} className={`inline-block ${className}`} />
+      </div>
+    );
+  }
 
   return <span ref={containerRef} className={className} />;
 }

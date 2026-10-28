@@ -1,3 +1,6 @@
+import type { Instrumentation } from 'next';
+import { logger } from '@/lib/observability/logger';
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     try {
@@ -7,8 +10,32 @@ export async function register() {
       await mongoDb.collection('problems').createIndex({ finalExpression: 'text' });
     } catch (error) {
       // Don't crash runtime if offline in build/test environments
-      console.warn('MongoDB connection note at startup:', error instanceof Error ? error.message : error);
+      logger.warn('mongodb.startup_failed', { error });
     }
   }
 }
+
+export const onRequestError: Instrumentation.onRequestError = async (
+  error,
+  request,
+  context,
+) => {
+  const rawDigest =
+    error && typeof error === 'object' && 'digest' in error
+      ? (error as { digest?: unknown }).digest
+      : undefined;
+  const digest = typeof rawDigest === 'string' ? rawDigest : undefined;
+
+  logger.error('next.request_error', {
+    digest,
+    path: request.path,
+    method: request.method,
+    routerKind: context.routerKind,
+    routePath: context.routePath,
+    routeType: context.routeType,
+    renderSource: context.renderSource,
+    revalidateReason: context.revalidateReason,
+    error,
+  });
+};
 

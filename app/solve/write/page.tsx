@@ -246,8 +246,19 @@ export default function WriteSolvePage() {
       });
 
       if (!res.ok) {
-        const payload = await res.json().catch(() => null);
-        geminiFailure = payload?.error || geminiFailure;
+        const payload: unknown = await res.json().catch(() => null);
+        const errorPayload = (payload as { error?: unknown } | null)?.error;
+
+        if (typeof errorPayload === 'string') {
+          geminiFailure = errorPayload;
+        } else if (
+          errorPayload &&
+          typeof errorPayload === 'object' &&
+          typeof (errorPayload as { message?: unknown }).message === 'string'
+        ) {
+          geminiFailure = (errorPayload as { message: string }).message;
+        }
+
         throw new Error(geminiFailure);
       }
 

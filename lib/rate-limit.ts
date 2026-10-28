@@ -1,4 +1,5 @@
 import { mongoDb } from './db/client';
+import { logger } from './observability/logger';
 
 type SlidingRateLimitEntry = {
   timestamps: number[];
@@ -74,9 +75,51 @@ export function checkRateLimit(
   };
 }
 
+let rateLimitIndexesPromise: Promise<void> | null = null;
+
+const DISTRIBUTED_TIMEOUT_MS = 2_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Rate-limit store timed out')), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /**
- * Distributed rate limiter backed by MongoDB for multi-instance / serverless environments.
- * Falls back gracefully to in-memory rate limiter if DB is unreachable.
+ * Creates the indexes required by the distributed limiter once per process.
+ * The TTL index is required: it prevents the collection from growing forever.
+ */
+function ensureRateLimitIndexes(): Promise<void> {
+  if (!rateLimitIndexesPromise) {
+    rateLimitIndexesPromise = (async () => {
+      const collection = mongoDb.collection('rate_limits');
+      await collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+      try {
+        await collection.createIndex({ key: 1 }, { unique: true });
+      } catch {
+        // Duplicate keys may exist from older builds. Lookups still work.
+      }
+    })().catch((error) => {
+      // Index creation is best-effort; never disable the limiter because of it.
+      rateLimitIndexesPromise = null;
+      logger.warn('rate_limit.index_setup_skipped', { error });
+    });
+  }
+
+  return rateLimitIndexesPromise;
+}
+
+/**
+ * Distributed fixed-window rate limiter backed by MongoDB for multi-instance /
+ * serverless environments. The window is reset atomically once it expires, so
+ * keys can never get permanently stuck at the limit.
+ *
+ * Falls back gracefully to the in-memory limiter if the DB is unreachable.
  */
 export async function checkDistributedRateLimit(
   key: string,
@@ -85,35 +128,61 @@ export async function checkDistributedRateLimit(
 ): Promise<{ success: boolean; remaining: number; reset: number }> {
   try {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + windowMs);
+    const windowExpiresAt = new Date(now.getTime() + windowMs);
     const collection = mongoDb.collection('rate_limits');
 
-    // Atomic findOneAndUpdate with upsert
-    const res = await collection.findOneAndUpdate(
-      { key },
-      {
-        $inc: { count: 1 },
-        $setOnInsert: { createdAt: now, expiresAt },
-      },
-      { upsert: true, returnDocument: 'after' }
+    const isExpired = {
+      $or: [
+        { $eq: [{ $type: '$expiresAt' }, 'missing'] },
+        { $lte: ['$expiresAt', now] },
+      ],
+    };
+
+    // Single atomic pipeline update: reset an expired window, otherwise increment.
+    // Bounded by a timeout so a slow/unreachable DB cannot stall the request.
+    const res = await withTimeout(
+      (async () => {
+        await ensureRateLimitIndexes();
+        return collection.findOneAndUpdate(
+          { key },
+          [
+            {
+              $set: {
+                count: {
+                  $cond: [isExpired, 1, { $add: [{ $ifNull: ['$count', 0] }, 1] }],
+                },
+                createdAt: { $ifNull: ['$createdAt', now] },
+                expiresAt: {
+                  $cond: [isExpired, windowExpiresAt, '$expiresAt'],
+                },
+              },
+            },
+          ],
+          { upsert: true, returnDocument: 'after' }
+        );
+      })(),
+      DISTRIBUTED_TIMEOUT_MS
     );
 
-    const doc = res?.value || res;
-    const count = (doc && typeof doc === 'object' && 'count' in doc) ? (doc.count as number) : 1;
-    const docExpires = (doc && typeof doc === 'object' && 'expiresAt' in doc && doc.expiresAt instanceof Date)
-      ? doc.expiresAt.getTime()
-      : expiresAt.getTime();
+    // MongoDB driver v6+ returns the document directly; older versions wrap it.
+    const doc = (res as { value?: Record<string, unknown> } | null)?.value ?? res;
+    const count =
+      doc && typeof doc === 'object' && typeof (doc as { count?: unknown }).count === 'number'
+        ? (doc as { count: number }).count
+        : 1;
+    const docExpires =
+      doc &&
+      typeof doc === 'object' &&
+      (doc as { expiresAt?: unknown }).expiresAt instanceof Date
+        ? ((doc as { expiresAt: Date }).expiresAt.getTime())
+        : windowExpiresAt.getTime();
 
     const remaining = Math.max(0, limit - count);
     const reset = Math.max(1, Math.ceil((docExpires - now.getTime()) / 1000));
 
-    if (count > limit) {
-      return { success: false, remaining: 0, reset };
-    }
-
-    return { success: true, remaining, reset };
+    return { success: count <= limit, remaining, reset };
   } catch {
-    // If MongoDB is slow or unreachable, fall back to robust sliding window in-memory limiter
+    // If MongoDB is slow or unreachable, fall back to the in-memory limiter.
     return checkRateLimit(key, limit, windowMs);
   }
 }

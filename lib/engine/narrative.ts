@@ -113,6 +113,18 @@ export function generateCompleteNarrative(
       strategyOverview =
         'We simplify the polynomial by expanding multiplicative terms, grouping like powers of variables, and expressing the result in canonical descending degree order.';
       break;
+    case 'Inequality':
+      strategyOverview =
+        'We solve this inequality by isolating the variable, determining the boundary critical values, taking into account any sign flips when multiplying or dividing by negatives, and expressing the solution set in interval notation.';
+      break;
+    case 'Limit':
+      strategyOverview =
+        'We evaluate this mathematical limit using calculus limit laws, algebraic cancellation of indeterminate forms, or direct analytic substitution.';
+      break;
+    case 'Matrix Operation':
+      strategyOverview =
+        'We perform linear algebraic matrix computations utilizing exact arithmetic, computing determinants and inverse matrices systematically.';
+      break;
     default:
       strategyOverview =
         'We solve the mathematical problem using deterministic symbolic computation and verify the result.';

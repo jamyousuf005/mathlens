@@ -1,39 +1,13 @@
-import { auth } from '@/lib/auth';
 import { toNextJsHandler } from 'better-auth/next-js';
-import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import { withApiRoute } from '@/lib/api/handler';
 
 const handlers = toNextJsHandler(auth.handler);
 
-export async function GET(request: NextRequest) {
-  try {
-    return await handlers.GET(request);
-  } catch (err: unknown) {
-    const error = err as Error;
-    console.error('[AUTH_GET_ERROR]', error);
-    const isDev = process.env.NODE_ENV !== 'production';
-    return NextResponse.json(
-      {
-        error: 'Internal Server Error',
-        ...(isDev ? { message: error?.message, stack: error?.stack } : {}),
-      },
-      { status: 500 }
-    );
-  }
-}
+export const GET = withApiRoute('/api/auth/[...all]', async (request) =>
+  handlers.GET(request),
+);
 
-export async function POST(request: NextRequest) {
-  try {
-    return await handlers.POST(request);
-  } catch (err: unknown) {
-    const error = err as Error;
-    console.error('[AUTH_POST_ERROR]', error);
-    const isDev = process.env.NODE_ENV !== 'production';
-    return NextResponse.json(
-      {
-        error: 'Internal Server Error',
-        ...(isDev ? { message: error?.message, stack: error?.stack } : {}),
-      },
-      { status: 500 }
-    );
-  }
-}
+export const POST = withApiRoute('/api/auth/[...all]', async (request) =>
+  handlers.POST(request),
+);

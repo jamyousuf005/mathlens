@@ -1,23 +1,31 @@
 import { NextRequest } from 'next/server';
 
+function firstForwardedIp(value: string | null): string | null {
+  if (!value) return null;
+  const first = value.split(',')[0]?.trim();
+  return first ? first : null;
+}
+
 /**
- * Extracts a dependable client IP from incoming NextRequest headers,
- * prioritizing trusted reverse proxy headers (Cloudflare, Vercel, Fly.io, etc.).
+ * Extracts a trustworthy client IP from platform-set request headers.
+ *
+ * Security note: headers that a client can set must never drive a security
+ * decision. On Vercel, `x-vercel-forwarded-for`, `x-forwarded-for`, and
+ * `x-real-ip` are written by the platform edge (Vercel overwrites XFF to
+ * prevent IP spoofing), so they are safe to read first. `cf-connecting-ip` is
+ * only trustworthy when Cloudflare is the outermost proxy, so it is opt-in.
  */
 export function getClientIp(req: NextRequest): string {
-  // Cloudflare
-  const cfIp = req.headers.get('cf-connecting-ip');
-  if (cfIp && cfIp.trim()) return cfIp.trim();
+  const platformIp =
+    firstForwardedIp(req.headers.get('x-vercel-forwarded-for')) ??
+    firstForwardedIp(req.headers.get('x-forwarded-for')) ??
+    firstForwardedIp(req.headers.get('x-real-ip'));
 
-  // Vercel / Standard reverse proxy
-  const realIp = req.headers.get('x-real-ip');
-  if (realIp && realIp.trim()) return realIp.trim();
+  if (platformIp) return platformIp;
 
-  // Standard forwarded for (take the first client IP in chain)
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
+  if (process.env.TRUST_CF_CONNECTING_IP === 'true') {
+    const cfIp = firstForwardedIp(req.headers.get('cf-connecting-ip'));
+    if (cfIp) return cfIp;
   }
 
   return 'anonymous';
